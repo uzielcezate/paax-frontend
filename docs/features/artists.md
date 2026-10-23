@@ -19,6 +19,9 @@ A key backend convenience: the v2 artist endpoints return **pre-split** release 
 
 `Artist` (Hive typeId 4, box `followed_artists`, keyed by `artist.id`).
 
+**Hero header styling** lives in `presentation/widgets/artist_header_style.dart`: `artistHeroGradient()` is a multi-stop, smoothstep-eased fade that starts ~32% down the square hero and ends in the exact `AppColors.background` (every stop is that colour at a different alpha — the previous middle stop was `#121212` on a `#080808` page, which read as a visible band). `artistHeaderBottomInset()` / `artistHeaderActionsGap()` are the responsive gaps that put the name + followers pill lower and closer to the Shuffle / Play / Follow row. The name is capped at 2 lines. Tests: `test/unit/artist_header_style_test.dart`.
+
+
 | Field | Source | Display |
 |-------|--------|---------|
 | Name | Deezer `/v2/artist/{id}` | Hero title |

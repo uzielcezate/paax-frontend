@@ -99,6 +99,7 @@ See [tasks/in-progress.md](tasks/in-progress.md).
 
 | Date | Change | Author |
 |------|--------|--------|
+| 2026-10-23 | Visual polish — artist hero spacing + banded gradient fix, denser Full Player with ~2× controls (`PlayerControlMetrics`), constraint-aware `MarqueeText` (no overshoot, fade only while moving, recalculates on lyrics expand/collapse), phones locked to portrait (`orientation_policy.dart`). Frontend only; playback/sync/auth untouched. | AI agent |
 | 2026-07-26 | Phase 3.3 — browsing display migrated to normalized Supabase-first `/v2` (artist detail, search artists/albums, Home hydration); canonical `ArtworkResolver` fixes missing artist artwork; Paax follower count + singular/plural + optimistic reconcile; date-aware discography ordering (client + backend `release_ordering`); bounded-concurrency cold-artist discography ingest; replaceable `ArtistDiscoveryRepository` (`ARTIST_DISCOVERY_MODE`); auth top-bar chevron/tint fix. Playback untouched. No schema change. | AI agent |
 | 2026-07-17 | Phase 3.2B — followed genres (offline-first, `user_followed_genres`, no migration; Follow pill on `GenreResultsScreen`) + personalized Home rebuilt from real Supabase catalog sections (`HomeRepository`/`HomeController`, per-user cache) | AI agent |
 | 2026-07-17 | Phase 3.2A — real artist onboarding (5-artist min + RPC), real Supabase profile + avatar upload, offline-first cloud library sync (`user_hidden_tracks` + `complete_artist_onboarding` RPC), Phase 3.1 password-reuse error fix | AI agent |

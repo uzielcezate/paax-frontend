@@ -32,6 +32,7 @@ import '../../core/utils/dominant_color_service.dart';
 
 import '../../core/utils/responsive.dart';
 import '../../core/utils/string_utils.dart';
+import '../widgets/artist_header_style.dart';
 
  class ArtistDetailScreen extends StatefulWidget {
   // ... (unchanged)
@@ -403,25 +404,19 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                           }
                         ),
                       
-                      // Bottom fade into AppColors.background (#121212)
+                      // Bottom fade into the exact page background: eased,
+                      // starts a third of the way down, no colour shift
+                      // (see artist_header_style.dart).
                       Container(
-                        decoration: const BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.transparent,
-                              Color(0x99121212),
-                              AppColors.background,
-                            ],
-                            stops: [0.0, 0.5, 1.0],
-                          ),
+                        decoration: BoxDecoration(
+                          gradient: artistHeroGradient(),
                         ),
                       ),
 
                       // Artist Title and Fans (Aligned to Bottom)
                       Positioned(
-                        bottom: 24,
+                        bottom: artistHeaderBottomInset(
+                            MediaQuery.sizeOf(context).width),
                         left: 20,
                         right: 20,
                         child: Column(
@@ -431,6 +426,8 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                             Text(
                               widget.artistName,
                               textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
                                 fontSize: 36,
                                 fontWeight: FontWeight.w900,
@@ -519,7 +516,9 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Column(
                     children: [
-                      const SizedBox(height: 16),
+                      SizedBox(
+                          height: artistHeaderActionsGap(
+                              MediaQuery.sizeOf(context).width)),
                       FutureBuilder<Artist>(
                         future: _artistInfoFuture,
                         builder: (context, snapshot) {

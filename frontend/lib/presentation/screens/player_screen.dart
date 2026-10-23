@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../state/playback_controller.dart';
 import '../state/library_controller.dart';
 import '../widgets/marquee_text.dart';
+import '../widgets/player_layout_metrics.dart';
 
 import '../widgets/overflow_menu.dart';
 import '../widgets/app_image.dart';
@@ -121,9 +122,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               .reduce((a, b) => a > b ? a : b);
 
           // ── Artwork sizing ──
-          // Controls area height: header(52) + info(60) + progress(40) + controls(60) + lower(50) + spacing(~80)
-          const controlsReserved = 340.0;
+          // Everything below the artwork is budgeted by PlayerControlMetrics
+          // (controls scale with width, so the reserve does too).
           final contentWidth = screenWidth - 2 * kPlayerHorizontalPadding;
+          final controlsReserved =
+              PlayerControlMetrics.forWidth(contentWidth).reservedHeight;
           const maxArtworkWidth = 440.0;
           final availableHeight = screenHeight - topInset - bottomInset - controlsReserved;
           final maxByHeight = availableHeight * 0.85;
@@ -208,7 +211,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                           ),
                         ),
                         
-                        const SizedBox(height: 8),
+                        const SizedBox(height: PlayerControlMetrics.headerGap),
 
                         // ── Content area: Song mode or Lyrics mode ──
                         Expanded(
@@ -220,18 +223,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         // ── Track Info ──
                         _buildTrackInfo(track),
                         
-                        SizedBox(height: _lyricsExpanded ? 12 : 20),
-                        
+                        SizedBox(
+                            height: _lyricsExpanded
+                                ? 10
+                                : PlayerControlMetrics.infoToProgressGap),
+
                         // ── Progress Bar ──
-                        const SmoothAudioProgressBar(), 
-                        
+                        const SmoothAudioProgressBar(),
+
                         // ── Controls + Lower — hidden when lyrics expanded ──
                         if (!_lyricsExpanded) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(
+                              height: PlayerControlMetrics.progressToControlsGap),
                           const _PlayerControls(),
-                          const SizedBox(height: 8),
+                          const SizedBox(
+                              height: PlayerControlMetrics.controlsToLowerGap),
                           const _LowerActions(),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: PlayerControlMetrics.bottomGap),
                         ] else
                           const SizedBox(height: 8),
                       ],
@@ -538,14 +546,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 builder: (ctx) => AddToPlaylistSheet(tracks: [track]),
               );
             },
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: PlayerControlMetrics.minTouchTarget,
+              minHeight: PlayerControlMetrics.minTouchTarget,
+            ),
             icon: Container(
-              width: 28,
-              height: 28,
+              width: PlayerControlMetrics.addRing,
+              height: PlayerControlMetrics.addRing,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white54, width: 1.5),
+                border: Border.all(color: Colors.white54, width: 2),
               ),
-              child: const Icon(Icons.add, color: Colors.white, size: 18),
+              child: const Icon(Icons.add,
+                  color: Colors.white, size: PlayerControlMetrics.addIcon),
             ),
           ),
           const SizedBox(width: 4),
@@ -554,11 +568,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
             builder: (context, lib, _) {
                 final isLiked = lib.isLiked(track);
                 return IconButton(
-                    onPressed: () => lib.toggleLike(track), 
+                    onPressed: () => lib.toggleLike(track),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: PlayerControlMetrics.minTouchTarget,
+                      minHeight: PlayerControlMetrics.minTouchTarget,
+                    ),
                     icon: Icon(
-                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
+                        isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
                         color: isLiked ? Colors.white : Colors.white.withValues(alpha: 0.7),
-                        size: 26,
+                        size: PlayerControlMetrics.likeIcon,
                     )
                 );
             }
@@ -584,68 +603,91 @@ class _PlayerControlsState extends State<_PlayerControls> {
   Widget build(BuildContext context) {
     final controller = context.read<PlaybackController>();
 
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-           // Shuffle
-           Selector<PlaybackController, bool>(
-             selector: (_, c) => c.isShuffle,
-             builder: (_, isShuffle, __) => IconButton(
-               icon: Icon(Icons.shuffle, color: isShuffle ? AppColors.primaryEnd : Colors.white54, size: 24),
-               onPressed: controller.toggleShuffle,
-             ),
-           ),
-           const SizedBox(width: 12),
-           // Prev
-           IconButton(
-             icon: const Icon(Icons.skip_previous_rounded, size: 40, color: Colors.white),
-             onPressed: () => controller.playPrevious(),
-           ),
-           const SizedBox(width: 8),
-           // Play/Pause — scale transition (no rotation)
-           Selector<PlaybackController, bool>(
-             selector: (_, c) => c.isPlaying,
-             builder: (_, isPlaying, __) => GestureDetector(
-               onTap: () {
-                 controller.togglePlayPause();
-               },
-               child: AnimatedSwitcher(
-                 duration: const Duration(milliseconds: 100),
-                 transitionBuilder: (child, animation) {
-                   return ScaleTransition(scale: animation, child: child);
-                 },
-                 child: Icon(
-                   isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                   key: ValueKey<bool>(isPlaying),
-                   size: 76,
-                   color: Colors.white,
-                 ),
-               ),
-             ),
-           ),
-           const SizedBox(width: 8),
-           // Next
-           IconButton(
-             icon: const Icon(Icons.skip_next_rounded, size: 40, color: Colors.white),
-             onPressed: () => controller.playNext(),
-           ),
-           const SizedBox(width: 12),
-           // Loop
-           Selector<PlaybackController, LoopMode>(
-             selector: (_, c) => c.loopMode,
-             builder: (_, loopMode, __) => IconButton(
-               icon: Icon(
-                   loopMode == LoopMode.one ? Icons.repeat_one_rounded : Icons.repeat_rounded,
-                   color: loopMode != LoopMode.off ? AppColors.primaryEnd : Colors.white54,
-                   size: 24,
-               ),
-               onPressed: controller.toggleLoop,
-             ),
-           ),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final m = PlayerControlMetrics.forWidth(constraints.maxWidth);
+        BoxConstraints box(double side) =>
+            BoxConstraints(minWidth: side, minHeight: side);
+
+        return SizedBox(
+          height: m.rowHeight,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Shuffle
+              Selector<PlaybackController, bool>(
+                selector: (_, c) => c.isShuffle,
+                builder: (_, isShuffle, __) => IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: box(m.shuffleBox),
+                  icon: Icon(Icons.shuffle,
+                      color: isShuffle ? AppColors.primaryEnd : Colors.white54,
+                      size: m.shuffleIcon),
+                  onPressed: controller.toggleShuffle,
+                ),
+              ),
+              // Prev
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: box(m.skipBox),
+                icon: Icon(Icons.skip_previous_rounded,
+                    size: m.skipIcon, color: Colors.white),
+                onPressed: () => controller.playPrevious(),
+              ),
+              // Play/Pause — scale transition (no rotation)
+              Selector<PlaybackController, bool>(
+                selector: (_, c) => c.isPlaying,
+                builder: (_, isPlaying, __) => GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: controller.togglePlayPause,
+                  child: SizedBox(
+                    width: m.playBox,
+                    height: m.playBox,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 100),
+                      transitionBuilder: (child, animation) {
+                        return ScaleTransition(scale: animation, child: child);
+                      },
+                      child: Icon(
+                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                        key: ValueKey<bool>(isPlaying),
+                        size: m.playIcon,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              // Next
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: box(m.skipBox),
+                icon: Icon(Icons.skip_next_rounded,
+                    size: m.skipIcon, color: Colors.white),
+                onPressed: () => controller.playNext(),
+              ),
+              // Loop
+              Selector<PlaybackController, LoopMode>(
+                selector: (_, c) => c.loopMode,
+                builder: (_, loopMode, __) => IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: box(m.shuffleBox),
+                  icon: Icon(
+                    loopMode == LoopMode.one
+                        ? Icons.repeat_one_rounded
+                        : Icons.repeat_rounded,
+                    color: loopMode != LoopMode.off
+                        ? AppColors.primaryEnd
+                        : Colors.white54,
+                    size: m.shuffleIcon,
+                  ),
+                  onPressed: controller.toggleLoop,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -664,7 +706,8 @@ class _LowerActions extends StatelessWidget {
         children: [
           // Device output (placeholder)
           IconButton(
-            icon: const Icon(Icons.cast_rounded, size: 18, color: Colors.white38),
+            icon: const Icon(Icons.cast_rounded,
+                size: PlayerControlMetrics.castIcon, color: Colors.white38),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -676,7 +719,8 @@ class _LowerActions extends StatelessWidget {
           ),
           // Queue button
           IconButton(
-            icon: const Icon(Icons.queue_music_rounded, size: 20, color: Colors.white38),
+            icon: const Icon(Icons.queue_music_rounded,
+                size: PlayerControlMetrics.queueIcon, color: Colors.white38),
             onPressed: () => showQueueSheet(context),
           ),
         ],
