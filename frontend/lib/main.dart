@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/orientation_policy.dart';
 import 'core/config/api_config.dart';
 import 'core/config/supabase_config.dart';
 import 'data/local/hive_storage.dart';
@@ -65,6 +66,18 @@ void main() async {
   } catch (e) {
     // ignore: avoid_print
     if (!kIsWeb) print('[Paax] Supabase init failed/timed out: $e');
+  }
+
+  // ── Orientation policy ──
+  // Phones are portrait-up only; tablets keep landscape. Decided from the
+  // rotation-invariant shortest side, see orientation_policy.dart.
+  if (!kIsWeb) {
+    try {
+      await applyOrientationPolicy();
+    } catch (e) {
+      // ignore: avoid_print
+      print('[Paax] Orientation policy failed: $e');
+    }
   }
 
   // ── Edge-to-edge rendering ──

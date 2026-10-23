@@ -166,6 +166,10 @@ flutter build apk --dart-define=STARTUP_DIAGNOSTICS=false
 
 ---
 
+## Orientation policy
+
+`main()` calls `applyOrientationPolicy()` (`core/utils/orientation_policy.dart`) right after Supabase init, before edge-to-edge setup. It reads the first `FlutterView`'s logical size and, when the **shortest side** is under 600dp (a phone), calls `SystemChrome.setPreferredOrientations([portraitUp])`; otherwise it leaves every orientation allowed (tablets already have responsive landscape layouts). The shortest side is rotation-invariant, so the classification cannot flip after a rotation. Portrait-down is deliberately excluded (Android only honours it via `sensorPortrait`, which several OEM skins render badly). The preference is held by the Activity, so it survives backgrounding and system overlays; the manifest is unchanged (a static `screenOrientation` would also lock tablets). Tradeoff: there is no richer tablet detection than the 600dp shortest-side rule. Tests: `test/unit/orientation_policy_test.dart`.
+
 ## Startup dependency audit
 
 None of these block the shell:

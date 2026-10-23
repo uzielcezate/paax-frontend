@@ -136,6 +136,13 @@ The app is **dark-only**. `ThemeState` holds ambient `backgroundColor`/`foregrou
 
 ## Bug Notes
 
+### [2026-10-23] — Marquee overshoot/snapback and stale fades were three separate bugs
+
+**Added by**: AI agent · **Category**: Bug (fixed) · **Confidence**: High · **Still valid as of**: 2026-10-23
+
+The old `MarqueeText` (1) captured the scroll distance as a local in `build()` while the rendered width was re-measured later inside the async loop, so the painter translated by one distance and the animation by another — the visible overshoot + snap at the end of each cycle; (2) only re-checked the container width in its *non-scrolling* branch, so once scrolling it never noticed that the lyrics panel had freed up width — text that now fit kept scrolling and showed its second copy on the far edge; (3) applied the `ShaderMask` fade whenever it overflowed, not when it moved. It also slept on a bare `Future.delayed` that outlived disposal. The rewrite keeps one `_cycleDistance` field for both painter and animation, decides overflow inside `LayoutBuilder` on every build, derives fade strength from the live offset, and uses a cancellable `Timer` + generation token. If you touch it, keep the tests in `test/widget/marquee_text_test.dart` green — they encode each of these.
+
+
 ### [2026-07-16] — Legacy `backend/` stream resolver is broken
 
 **Added by**: documentation baseline · **Category**: Bug · **Confidence**: High · **Still valid as of**: 2026-07-16
