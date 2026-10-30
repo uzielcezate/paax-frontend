@@ -606,6 +606,31 @@ class PlaybackController extends ChangeNotifier {
 
   Widget buildPlayerView(BuildContext context) => _engine.buildPlayerView(context);
 
+  /// Web demo only (called from the demo wiring in main.dart when a demo
+  /// session ends): pause the engine and drop the in-memory queue so the next
+  /// "Restart Demo" starts with an empty player instead of inheriting the
+  /// previous run's track. Normal mobile/web flows never call this.
+  Future<void> resetForDemoEnd() async {
+    _playGeneration++; // invalidate any in-flight play transaction
+    try {
+      await _engine.pause();
+    } catch (_) {}
+    _queue = [];
+    _currentIndex = -1;
+    _confirmedQueue = [];
+    _confirmedIndex = -1;
+    _isPlaying = false;
+    _confirmedIsPlaying = false;
+    _isLoadingTrack = false;
+    _position = Duration.zero;
+    _duration = Duration.zero;
+    _confirmedPosition = Duration.zero;
+    _confirmedDuration = Duration.zero;
+    positionNotifier.value = Duration.zero;
+    durationNotifier.value = Duration.zero;
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _engine.dispose();
