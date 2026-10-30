@@ -230,7 +230,7 @@ Confirmed non-live code. If asked to touch any of it, first decide whether the c
 | Item | Location | Status |
 |------|----------|--------|
 | `deezer_api_client.dart` | `frontend/lib/data/api/` | **Fully commented out** (dead) |
-| `media_session_web.dart` | `frontend/lib/core/playback/` | **Fully commented out** |
+| `media_session_web.dart` | `frontend/lib/core/playback/` | **Was fully commented out until 2026-10-30**, which made `flutter build web` fail (undefined `setMediaSession` etc.). Now four documented no-ops; the IFrame owns browser media controls |
 | `getStreamUrl` / `/stream/{videoId}` | data source + repo | Defined, **unused** by playback |
 | `ApiConfig.streamBaseUrl` | `core/config/api_config.dart` | Referenced only within the config file |
 | `paax-stream` `resolve/`, `resolver/`, `providers/`, `services/` | `paax-stream/` | **Orphaned**, not mounted; can't import (`yt_dlp` missing) |
@@ -405,3 +405,11 @@ so its bounding-box diagonal ends up at 60% of the final icon. It must be
 authored PRE-INSET — flutter_launcher_icons writes `<inset android:inset="16%">`
 into `mipmap-anydpi-v26/ic_launcher.xml`, which shrinks the drawable to 68%. If
 that XML ever changes, update `kPluginInsetPerEdge` in the tool.
+
+### Flutter Web gotchas learned while validating the demo (2026-10-30)
+
+- **Platform views eat taps.** `youtube_player_iframe` renders a real `<iframe>` via `HtmlElementView`; the browser routes pointer events to it before Flutter's hit-testing. The 300×300 `HiddenVideoPlayer` at (0,0) therefore made the top-left of every screen dead on web. Fix lives in `playback_engine_web.dart` only (`pointer-events:none` on the iframe + `flt-platform-view`, `IgnorePointer` around the widget). The iframe is in the light DOM under `flutter-view > flt-glass-pane > flt-platform-view` with this engine build (no shadow root).
+- **`path_provider` has no web implementation.** Anything that reaches `getApplicationSupportDirectory()` on web throws `MissingPluginException` (it was `ThrottledCacheManager`'s `JsonCacheInfoRepository`). Guard with `kIsWeb`.
+- **YouTube error 150 from `127.0.0.1`/`localhost` is about the Referer, not the app.** Label-owned videos only embed when the Referer is a real domain (the mobile engine fakes `https://paaxmusic.app` as `baseUrl` for the same reason). Test web playback from a real domain or rewrite the Referer in the test browser.
+- **Debugging the player on web:** read `player.getPlayerState()` inside the `about:srcdoc` frame (puppeteer `page.frames()`); `postMessage` traffic is not visible on the top window.
+- **App-scoped controllers survive a "session end".** `PlaybackController` is created once per app; ending a demo must reset it explicitly (`resetForDemoEnd()`), otherwise the next run inherits the queue.

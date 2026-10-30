@@ -169,6 +169,20 @@ Every track carries a `playback` block:
 
 ---
 
+## Endpoints — Demo sessions (`/v2/demo`, additive, 2026-10-30)
+
+Portfolio demo identities — see [features/demo-mode.md](features/demo-mode.md) for the full contract.
+
+| Method & path | Auth | Purpose |
+|---|---|---|
+| `POST /v2/demo/sessions` | none (rate-limited 6/IP/10 min, 120/h global; `DEMO_ENABLED` kill switch) | Mint an isolated 10-minute demo identity; returns `{session, auth{access_token, refresh_token}, user, launch}` (`201`) |
+| `GET /v2/demo/sessions/me` | `Bearer <demo access token>` | Authoritative `{session{active, remaining_seconds, expires_at, server_time}}` |
+| `POST /v2/demo/sessions/end` | `Bearer <demo access token>` | End now: marks `demo_sessions.ended_at` and deletes the identity |
+
+Errors use `{ "error": { "code", "message" } }`: `DEMO_RATE_LIMITED` (429, `Retry-After`), `DEMO_DISABLED` (503), `DEMO_UNAUTHORIZED` (401), `DEMO_NOT_A_DEMO_USER` (403), `DEMO_IDENTITY_CREATE_FAILED` / `DEMO_TOKEN_EXCHANGE_FAILED` (502). All other endpoints are unchanged.
+
+---
+
 ## Endpoints — Lyrics
 
 #### `GET /lyrics`

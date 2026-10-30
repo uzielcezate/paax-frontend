@@ -24,8 +24,15 @@ Paax spans four deployables. The tables below are grouped by where the variable 
 |----------|----------|-------------|---------------|
 | `YTMUSIC_OAUTH_JSON` | Prod (for auth'd endpoints only) | Full `oauth.json` content; written to a temp file to init an authenticated `ytmusicapi` client. Unset → unauthenticated (public content only) | `{ "access_token": "...", ... }` |
 | `REDIS_URL` | Optional | Redis connection for response cache. Unset → in-memory cache only | `redis://default:pass@host:6379` |
-| `FRONTEND_ORIGINS` | Optional | Comma-separated production CORS origins (localhost/LAN always allowed via regex) | `https://paaxmusic.app` |
+| `FRONTEND_ORIGINS` | Optional | Comma-separated production CORS origins, trimmed, scheme included (localhost/LAN always allowed via regex). Mobile apps send no `Origin`, so they are never affected. | `https://paaxmusic.app,https://www.paaxmusic.app,https://demo.paaxmusic.app,https://uzielsandoval.com,https://www.uzielsandoval.com` |
+| `FRONTEND_ORIGIN_REGEX` | Optional | Additional allowed-origin regex (anchored by the app) for hosts that cannot be enumerated, e.g. Cloudflare Pages previews | `https://[a-z0-9-]+\.paax-demo\.pages\.dev` |
 | `PORT` | Railway auto-sets | uvicorn listen port | `8080` |
+| `SUPABASE_PUBLISHABLE_KEY` | Preferred for demo sessions | **Public** modern API key (`sb_publishable_…`); used only as the `apikey` header for the GoTrue password grant that turns a freshly minted demo identity into a session. Opaque string, not a JWT. Never an `sb_secret_` key (rejected). | `sb_publishable_...` |
+| `SUPABASE_ANON_KEY` | Legacy fallback for demo sessions | **Public** legacy anon JWT; only used when `SUPABASE_PUBLISHABLE_KEY` is empty. | `eyJ...` |
+| `DEMO_ENABLED` | Optional | Kill switch for `/v2/demo/*` (default `true`) | `false` |
+| `DEMO_SESSION_SECONDS` | Optional | Demo lifetime (default `600`) | `600` |
+| `DEMO_RATE_LIMIT_PER_IP` / `DEMO_RATE_LIMIT_WINDOW_SECONDS` / `DEMO_RATE_LIMIT_GLOBAL` | Optional | Session-creation limits (defaults `6` / `600` / `120` per hour) | — |
+| `DEMO_EMAIL_DOMAIN` / `DEMO_DISPLAY_NAME` / `DEMO_WEB_URL` | Optional | Generated identity email domain, display name, launch URL echoed to the portfolio (defaults `demo.paaxmusic.app` / `Demo Visitor` / `https://paaxmusic.app/?demo=1`) | — |
 
 ### paax-stream (`resolver.paaxmusic.app`)
 
