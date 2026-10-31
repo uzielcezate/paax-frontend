@@ -45,7 +45,11 @@ Related: [design/components](../design/components.md) · [theming](theming.md) �
 | `NetworkImageWithFallback` | `network_image_with_fallback.dart` | Images | Legacy image variant |
 | `SmartNetworkImage` | `smart_network_image.dart` | Images | Legacy image variant |
 | `QueuedNetworkImage` | `queued_network_image.dart` | Images | Legacy image variant |
-| `MiniPlayer` | `mini_player.dart` | Player | 67px persistent bar; opens Full Player |
+| `MiniPlayer` | `mini_player.dart` | Player | 56px sculpted capsule (`PaaxPillSurface`, margins = `PaaxLayout.floatingInset`), circular 42px artwork, progress along the upper perimeter (`MiniPlayerArcProgressPainter`); opens Full Player |
+| `PaaxPillSurface` / `PaaxIconPill` / `PaaxSegmentedPills` / `PaaxSearchPill` | `paax_pill.dart` | Design system | Sculpted-pill primitives + `PaaxPillTheme` tokens (UI Visual System V2) |
+| `PaaxTopBar` | `paax_top_bar.dart` | Navigation | Detail-screen top bar: 44dp back/trailing pills on the floating inset + 44dp title capsule over a long `#080808` fade (`PaaxFade`) |
+| `SectionHeader` | `section_header.dart` | Layout | Section heading row; horizontal padding = `PaaxLayout.contentHorizontalInset` (V4 §4) |
+| `PaaxHeaderFade` / `PaaxFade` | `paax_pill.dart` | Design system | Atmospheric multi-stop header/dock fade (plateau behind controls + 80dp tail); scroll-tied via `opacity`, no `Opacity` layer |
 | `QueueBottomSheet` | `queue_bottom_sheet.dart` | Player | Draggable, reorderable queue |
 | `SmoothAudioProgressBar` | `smooth_audio_progress_bar.dart` | Player | 60fps interpolated scrubber |
 | `SyncedLyricsView` | `synced_lyrics_view.dart` | Player | Auto-advancing synced lyrics |

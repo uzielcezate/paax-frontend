@@ -125,7 +125,7 @@ See the engineering-oriented widget inventory in [frontend/widgets.md](../fronte
 |------|---------|------|
 | `size` | 40 | ⚠️ Below the 48px min touch target |
 | `iconSize` | 18 | — |
-| Fill / rim / shadow | `#111` / `white@0.08` 0.5px / `black@0.10` blur 8 | — |
+| Fill / rim / shadow | Sculpted pill (`PaaxIconPill`) since V2 — see [Sculpted Pill System](#sculpted-pill-system-ui-visual-system-v2--v3-2026-10-2324) | tap target is now ≥48dp around the 40dp disc |
 
 ---
 
@@ -157,6 +157,51 @@ Pairs with `OverflowMenu` (`MenuType.track`) and `AddToPlaylistSheet`.
 | `.dynamicBottom` | caller-supplied (ambient) | 240 | 0.98 | bottom |
 
 Multi-stop `LinearGradient` (5–6 stops) fading opaque→transparent so scrolling content vanishes gradually beneath the top controls / above the mini-player. `TopFadeGradient` and `EdgeGradient` are **deprecated** wrappers — prefer `DynamicEdgeFade`.
+
+---
+
+## Sculpted Pill System (UI Visual System V2 → V4, 2026-10-23/24)
+
+**Files**: `frontend/lib/presentation/widgets/paax_pill.dart` (tokens, `PaaxLayout` geometry, primitives, fades), `paax_top_bar.dart` (detail-screen top bar), `PaaxBottomNavigation` in `screens/main_wrapper.dart`, `MiniPlayerArcProgressPainter` in `widgets/mini_player.dart`.
+
+One centralized surface recipe backs the bottom navigation, the Mini Player, top-bar icon pills, segmented filter pills, search fields and the secondary circular action buttons. The Full Player does **not** import it (protected component).
+
+| Token (`PaaxPillTheme`) | Value |
+|------|-------|
+| Fill | uniform opaque `#111111` (`fill`) — V3 removed the V2 `#101010→#141414` gradient |
+| Bevel | `#666666`, 1 logical px, painted as a gradient stroke: top edge @0.50 → sides @0.16 → bottom @0 (`bevelGradient`) |
+| Search-field bevel | `#666666@0.28` top → `#191919` (`searchBevelGradient`) |
+| Shadow | `black@0.40` blur 10 offset (0,3) + `black@0.20` blur 2 offset (0,1) |
+| Active | fill `#FFFFFF`, foreground `#080808` |
+| Inactive foreground | `#A0A0A0`; placeholder `#8A8A8A` |
+| Fades | `#080808` multi-stop ramps only (`PaaxFade.ramp` = 0 → 8 → 22 → 45 → 72 → 95 %) — **no `BackdropFilter`** anywhere in the system |
+
+| Geometry (`PaaxLayout`) | Value | Used by |
+|------|-------|---------|
+| `contentHorizontalInset(context)` (alias `floatingInset`) | `Responsive.horizontalPadding` = 6 % of width, clamped 16–24dp (the list-artwork left edge). V4 §4: the single horizontal alignment system — also used by `SectionHeader`, Home/Artist carousels (first item on the inset), Artist/Discography/Library headings, grids and playlist rows, the Album/Playlist header block and the "See full discography" button | Top-bar pills, Mini Player, nav capsule, Search/Library/Discography header rows |
+| `topBarHeight` / `topBarPill` | 58dp bar region / 44dp discs, title capsule and search fields | `PaaxTopBar`, Search, Discography, Notifications, Library sort/search |
+| `navHeight` / `navIndicatorHeight` × `navIndicatorWidth` | 54dp capsule / 46 × 62dp white indicator (4dp inset, clamped to slot − 8) — V4 §3: 85 % of the V3 64 / 56 × 72 | `PaaxBottomNavigation` |
+| `miniPlayerHeight` / `dockGap` | 56dp / 6dp (`kMiniPlayerZone` = 62) — V4 §3: 85 % of the V3 66dp; artwork 42dp, concentric (7dp ring) | Mini Player, dock, Library FAB offset |
+| `dockBottomClearance` | 14dp added once to the bottom safe inset (V4 §2): `dockBottom = viewPadding.bottom + 14` lifts the nav capsule *and* the Mini Player together | dock, Library FAB offset |
+| `topFadeTail` / `bottomFadeExtra` | 80dp / 96dp | header fades / bottom dock fade (V4 §1: the dock fade is the **only** bottom fade — per-screen bottom gradients were removed from Home, Search, Library, Profile, Artist, Album, Playlist, Discography and Genre so nothing stacks; plateau ends at the nav capsule centre, mirroring the top bar) |
+
+| Widget | Role | Geometry contract |
+|--------|------|-------------------|
+| `PaaxPillSurface` | The decorated capsule (stadium unless `radius`), `active` → flat white | sizes to child or `width`/`height` |
+| `PaaxIconPill` | Circular icon pill | visual disc `size` (44 default) inside a ≥`minTapSize` (48) tap target |
+| `PaaxSegmentPill` / `PaaxSegmentedPills` | Filter / tab pills, horizontally scrolling | row height = pill height + `shadowRoom` (8dp); content-sized pills |
+| `PaaxSearchPill` | Shell around an unchanged `TextField` | caller keeps controller/focus/debounce; 44dp default |
+| `PaaxFade.gradient` / `PaaxHeaderFade` | Atmospheric fade: `plateau` px held at 95 % behind the controls, then a `tail` ramping 72→45→22→8→0 % | `opacity` scales the stops (scroll-tied, no `Opacity` layer); `IgnorePointer` |
+| `PaaxTopBar` | Back pill + title capsule + trailing pill over the header fade | 44dp discs whose outer edges sit on `floatingInset` (`controlOffset(inset)` = inset − 2 for the 48dp tap box); title capsule 44dp, padded `inset + 44 + 12`; fade plateau = bar centre, tail 80dp; fade/title animate together (150 ms) |
+| `PaaxBottomNavigation` | Floating nav capsule, 54dp, side margins = `floatingInset` | white 46×62 capsule (`indicatorWidth(slot)`) slides between equal slots (`AnimatedAlign`, 220 ms); glyphs 28dp |
+| `MiniPlayerArcProgressPainter` | Progress along the Mini Player's **upper** perimeter (left mid → left corner → top edge → right corner → right mid), measured by path length | `repaint: positionNotifier` → repaints only; 2dp stroke inset inside the capsule; track `white@0.10`, done `white@0.90` |
+| `PaaxEdgeFade` | Plain top/bottom `#080808` ramp | — |
+
+Migrated call sites: `main_wrapper.dart` (dock fade + nav), `mini_player.dart` (56dp capsule, circular 42dp artwork, arc progress), `search_screen.dart` (back/X pill, 44dp search pill, filter pills, header fade, dedicated search mode — see `SearchScreenMode`), `library_screen.dart` + `library_headers.dart` (header fade, inset-aligned title/tabs/sort/search), `artist_discography_screen.dart` (header fade, back pill, filter pills), `artist_detail_screen.dart` / `album_detail_screen.dart` / `playlist_detail_screen.dart` / `genre_results_screen.dart` (`PaaxTopBar`), `_buildActionButton` in the three detail screens and `track_detail_screen.dart` (secondary buttons only — the primary Play stays a flat white disc with identical size), `notifications_screen.dart` (back pill). `GlassCircleButton` and `GlassPill` in `glass_surface.dart` delegate to the pill primitives.
+
+Pinned headers (Search, Library, Discography) no longer paint an opaque `#080808` rectangle behind their controls: one `PaaxHeaderFade` sits behind the whole control stack, its plateau ends at the vertical centre of the lowest control (pill row / search row) and its 80dp tail dissolves into the list; opacity follows scroll offset (`offset / 40`). Scroll spacers: Search `SearchScreenMode.headerHeight` (`top + 8 + 44 [+ 10 + 42] + 4`), Discography `kDiscographyHeaderBelowStatus` (`58 + 42 + 4`), Library measured (`LibraryLayout.fadePlateauLift` = 28 for the plateau).
+
+**Search dedicated mode (V3 §8.2)**: `SearchScreenMode.isSearchMode(hasFocus, hasText)`; focusing the field hides Browse All / genre grid / category pills (pills return as soon as there is a query because the results flow switches on them), the back pill becomes an X (`Key('search_close')`, semantics "Close search") which unfocuses, clears the query, resets the filter to All and restores the browse screen without leaving the tab. Empty-query search mode renders nothing — reserved for local search history (not implemented, no storage).
 
 ---
 

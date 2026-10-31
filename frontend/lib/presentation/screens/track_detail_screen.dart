@@ -12,6 +12,7 @@ import '../../domain/repositories/music_repository.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/music_card.dart';
 import '../widgets/add_to_playlist_sheet.dart';
+import '../widgets/paax_pill.dart';
 
 class TrackDetailScreen extends StatefulWidget {
   final Track track;
@@ -234,15 +235,16 @@ class _TrackDetailScreenState extends State<TrackDetailScreen> {
       children: [
         GestureDetector(
           onTap: onTap,
-          child: Container(
-                width: 60, height: 60,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: primary ? Colors.white : AppColors.surface,
-                  border: primary ? null : Border.all(color: Colors.white.withOpacity(0.08), width: 0.5),
+          child: primary
+              ? Container(
+                  width: 60, height: 60,
+                  decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                  child: Icon(icon, color: Colors.black, size: 26),
+                )
+              : PaaxPillSurface(
+                  width: 60, height: 60,
+                  child: Center(child: Icon(icon, color: color, size: 26)),
                 ),
-                child: Icon(icon, color: primary ? Colors.black : color, size: 26),
-              ),
         ),
         const SizedBox(height: 8),
         Text(label, style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12)),

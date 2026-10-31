@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../core/theme/app_colors.dart';
+import 'paax_pill.dart';
 
+/// Library filter tabs (Liked / Playlists / Albums / Artists) as sculpted
+/// pills (UI Visual System V2 §6). Same 56dp preferred height, order,
+/// horizontal scrolling and content-based sizing as before; side padding is
+/// the shared floating inset (V3 §2).
 class LibraryChipTabs extends StatelessWidget implements PreferredSizeWidget {
   final int selectedIndex;
   final ValueChanged<int> onTabSelected;
@@ -13,42 +17,27 @@ class LibraryChipTabs extends StatelessWidget implements PreferredSizeWidget {
     required this.tabs,
   });
 
+  static const double pillHeight = 36;
+
   @override
   Size get preferredSize => const Size.fromHeight(56.0);
 
   @override
   Widget build(BuildContext context) {
+    // 36dp pills + 8dp shadow room inside PaaxSegmentedPills + 6dp above and
+    // below = 56dp, matching the previous row exactly.
     return SizedBox(
       height: 56.0,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        scrollDirection: Axis.horizontal,
-        physics: const ClampingScrollPhysics(),
-        primary: false,
-        itemCount: tabs.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, index) {
-          final isSelected = selectedIndex == index;
-          return GestureDetector(
-            onTap: () => onTabSelected(index),
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: isSelected ? Colors.white : AppColors.surface,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Text(
-                tabs[index],
-                style: TextStyle(
-                  color: isSelected ? const Color(0xFF121212) : Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          );
-        },
+      child: Center(
+        child: PaaxSegmentedPills(
+          labels: tabs,
+          selectedIndex: selectedIndex,
+          onSelected: onTabSelected,
+          height: pillHeight,
+          gap: 10,
+          padding: EdgeInsets.symmetric(
+              horizontal: PaaxLayout.floatingInset(context)),
+        ),
       ),
     );
   }
@@ -69,12 +58,13 @@ class SearchSortHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   double get minExtent => 64.0;
-  
+
   @override
   double get maxExtent => 64.0;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return _SearchSortRow(
       onSearchChanged: onSearchChanged,
       onSortPressed: onSortPressed,
@@ -112,7 +102,9 @@ class SearchSortHeader extends StatelessWidget {
   }
 }
 
-/// Shared layout for search bar + sort button using solid dark surface styling.
+/// Shared layout for search pill + sort pill (UI Visual System V2 §7).
+/// Same 44dp controls, 16dp side padding and 10dp gap as before; the
+/// [TextField] (focus, keyboard, filtering) is untouched.
 class _SearchSortRow extends StatelessWidget {
   final ValueChanged<String> onSearchChanged;
   final VoidCallback onSortPressed;
@@ -124,50 +116,43 @@ class _SearchSortRow extends StatelessWidget {
     this.foregroundColor,
   });
 
+  static const double controlHeight = 44;
+
   @override
   Widget build(BuildContext context) {
     final fg = foregroundColor ?? Colors.white;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: EdgeInsets.symmetric(
+          horizontal: PaaxLayout.floatingInset(context), vertical: 6),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Sort Button — solid dark surface
-          GestureDetector(
+          // Sort button — sculpted disc, 48dp tap target
+          PaaxIconPill(
+            icon: Icons.sort_rounded,
+            size: controlHeight,
+            iconSize: 20,
+            minTapSize: controlHeight,
+            foregroundColor: fg.withValues(alpha: 0.7),
+            semanticLabel: 'Sort',
             onTap: onSortPressed,
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: Icon(Icons.sort_rounded, color: fg.withValues(alpha: 0.7), size: 20),
-              ),
-            ),
           ),
           const SizedBox(width: 10),
-          // Search Field — solid dark surface
+          // Search field — sculpted pill shell around the unchanged TextField
           Expanded(
-            child: Container(
-              height: 44,
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Center(
-                child: TextField(
-                  onChanged: onSearchChanged,
-                  style: TextStyle(color: fg),
-                  decoration: InputDecoration(
-                    hintText: "Search...",
-                    hintStyle: TextStyle(color: fg.withValues(alpha: 0.38)),
-                    prefixIcon: Icon(Icons.search, color: fg.withValues(alpha: 0.38)),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    isDense: true,
-                  ),
+            child: PaaxSearchPill(
+              height: controlHeight,
+              child: TextField(
+                onChanged: onSearchChanged,
+                style: TextStyle(color: fg),
+                decoration: const InputDecoration(
+                  hintText: "Search...",
+                  hintStyle: TextStyle(color: PaaxPillTheme.placeholder),
+                  prefixIcon:
+                      Icon(Icons.search, color: PaaxPillTheme.placeholder),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  isDense: true,
                 ),
               ),
             ),

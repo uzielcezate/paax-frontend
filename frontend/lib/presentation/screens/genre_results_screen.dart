@@ -21,7 +21,7 @@ import '../widgets/network_image_with_fallback.dart';
 import '../../core/utils/string_utils.dart';
 import 'album_detail_screen.dart';
 import 'artist_detail_screen.dart';
-import '../widgets/glass_surface.dart';
+import '../widgets/paax_top_bar.dart';
 import '../../core/utils/dominant_color_service.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/utils/thumbnail_prefetcher.dart';
@@ -310,83 +310,17 @@ class _GenreResultsScreenState extends State<GenreResultsScreen> {
 
 
           // Bottom fade
-          DynamicEdgeFade.dynamicBottom(
-            key: ValueKey('fade_bot_genre_${widget.genreSlug}'),
-            color: AppColors.background,
-          ),
+          // (V4 §1) bottom fade is painted once by the MainWrapper dock.
 
+          // ── Local top navigation bar (sculpted pills) ──
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  color: _showTitle ? AppColors.background : Colors.transparent,
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top,
-                  ),
-                  child: SizedBox(
-                    height: 58,
-                    child: Stack(
-                      children: [
-                        // Left: back button — fixed position
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                        ),
-                        // Center: title — absolute center
-                        Positioned.fill(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: _showTitle ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 56),
-                                child: Text(
-                                  widget.genreSlug,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Soft bottom fade overlay
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        _showTitle ? AppColors.background : Colors.transparent,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            child: PaaxTopBar(
+              title: widget.genreSlug,
+              showTitle: _showTitle,
+              onBack: () => Navigator.pop(context),
             ),
           ),
         ],

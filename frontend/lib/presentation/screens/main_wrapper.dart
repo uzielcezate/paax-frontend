@@ -13,6 +13,7 @@ import 'profile_screen.dart';
 import 'player_screen.dart';
 import '../../core/utils/safe_insets.dart';
 import '../widgets/offline_banner.dart';
+import '../widgets/paax_pill.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
@@ -290,46 +291,50 @@ class MainWrapperState extends State<MainWrapper>
     );
   }
 
-  /// Bottom dock: gradient fade → mini player → nav icons.
-  /// The fade makes scrolling content disappear under the controls.
+  /// Bottom dock: atmospheric fade → mini player → nav capsule.
+  /// The fade makes scrolling content dissolve under the controls.
   Widget _buildBottomDock(bool hasTrack, double bottomSafePadding) {
-    // Nav icon row height + safe area
-    const double navHeight = 55;
-    // Mini player height (67) + 4px spacing top
-    const double miniPlayerZone = 71;
-    // Extra fade above everything so content starts dissolving earlier
-    const double fadeExtra = 40;
+    const double navHeight = PaaxLayout.navHeight;
+    const double miniPlayerZone = kMiniPlayerZone;
+    // Extra fade above everything so content starts dissolving early (V3 §4).
+    const double fadeExtra = PaaxLayout.bottomFadeExtra;
 
+    // Shared bottom offset of the floating stack: system safe inset + one
+    // clearance token (V4 §2). Applied once, here, for both components.
+    final double dockBottom =
+        bottomSafePadding + PaaxLayout.dockBottomClearance;
     final double contentHeight =
-        (hasTrack ? miniPlayerZone : 0) + navHeight + bottomSafePadding;
+        (hasTrack ? miniPlayerZone : 0) + navHeight + dockBottom;
     final double totalHeight = contentHeight + fadeExtra;
+    final double inset = PaaxLayout.floatingInset(context);
 
     return SizedBox(
       height: totalHeight,
       child: Stack(
         children: [
-          // ── Fade gradient: transparent → #080808 ──
+          // ── Fade: transparent → #080808, long ramp, plateau behind the
+          // controls. Never a blur; never intercepts touches. This is the
+          // ONLY bottom fade in the app (V4 §1): the per-screen bottom
+          // gradients were removed so nothing stacks into a solid panel.
           Positioned.fill(
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.0),
-                      AppColors.background.withValues(alpha: 0.60),
-                      AppColors.background.withValues(alpha: 0.80),
-                      AppColors.background.withValues(alpha: 1.0),
-                    ],
-                    stops: const [0.0, 0.20, 0.50, 1.0],
+                  gradient: PaaxFade.gradient(
+                    total: totalHeight,
+                    // Mirror of the top fade: the plateau ends at the nav
+                    // capsule's vertical centre, then the same 72→0 % ramp
+                    // runs up behind the Mini Player and [fadeExtra] beyond,
+                    // so content stays faintly visible under the whole dock.
+                    plateau: dockBottom + navHeight / 2,
+                    fromTop: false,
                   ),
                 ),
               ),
             ),
           ),
 
-          // ── Mini player + Nav icons (positioned at bottom) ──
+          // ── Mini player + Nav capsule (positioned at bottom) ──
           Positioned(
             left: 0,
             right: 0,
@@ -345,27 +350,39 @@ class MainWrapperState extends State<MainWrapper>
                       hasTrack ? const MiniPlayer() : const SizedBox.shrink(),
                 ),
 
-                if (hasTrack) const SizedBox(height: 4),
+                if (hasTrack) const SizedBox(height: PaaxLayout.dockGap),
 
-                // Nav icons
+                // Nav capsule (UI Visual System V2 §4 / V3 §6): one floating
+                // sculpted pill, white capsule under the active destination,
+                // aligned to the shared content inset.
                 Padding(
-                  padding: EdgeInsets.only(bottom: bottomSafePadding),
-                  child: SizedBox(
+                  padding: EdgeInsets.only(
+                    left: inset,
+                    right: inset,
+                    bottom: dockBottom,
+                  ),
+                  child: PaaxBottomNavigation(
                     height: navHeight,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        _navIconSvg(0, 'assets/icons/home.svg',
-                            'assets/icons/home-filled.svg'),
-                        _navIconSvg(1, 'assets/icons/magnifying-glass.svg',
-                            'assets/icons/magnifying-glass-filled.svg'),
-                        _navIcon(2, Icons.library_music_outlined,
-                            Icons.library_music),
-                        _navIcon(3, Icons.person_outline_rounded,
-                            Icons.person_rounded),
-                      ],
-                    ),
+                    currentIndex: _currentIndex,
+                    onTap: _onTabTapped,
+                    items: const [
+                      PaaxNavItem.svg(
+                          outlined: 'assets/icons/home.svg',
+                          filled: 'assets/icons/home-filled.svg',
+                          label: 'Home'),
+                      PaaxNavItem.svg(
+                          outlined: 'assets/icons/magnifying-glass.svg',
+                          filled: 'assets/icons/magnifying-glass-filled.svg',
+                          label: 'Search'),
+                      PaaxNavItem.icon(
+                          outlined: Icons.library_music_outlined,
+                          filled: Icons.library_music,
+                          label: 'Library'),
+                      PaaxNavItem.icon(
+                          outlined: Icons.person_outline_rounded,
+                          filled: Icons.person_rounded,
+                          label: 'Profile'),
+                    ],
                   ),
                 ),
               ],
@@ -375,73 +392,148 @@ class MainWrapperState extends State<MainWrapper>
       ),
     );
   }
+}
 
-  Widget _navIcon(int index, IconData outlinedIcon, IconData filledIcon) {
-    final isSelected = _currentIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => _onTabTapped(index),
-        behavior: HitTestBehavior.translucent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            Icon(
-              isSelected ? filledIcon : outlinedIcon,
-              color: isSelected ? Colors.white : Colors.white54,
-              size: 33,
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 3),
-              Container(
-                width: 4,
-                height: 4,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
+/// Vertical space the Mini Player occupies in the dock (capsule + gap above
+/// the nav capsule). Other screens (e.g. the Library FAB) offset by this.
+const double kMiniPlayerZone = PaaxLayout.miniPlayerHeight + PaaxLayout.dockGap;
+
+/// One destination of [PaaxBottomNavigation]: either a Material icon pair or
+/// an SVG asset pair (outlined / filled).
+class PaaxNavItem {
+  const PaaxNavItem.icon({
+    required IconData outlined,
+    required IconData filled,
+    required this.label,
+  })  : outlinedIcon = outlined,
+        filledIcon = filled,
+        outlinedAsset = null,
+        filledAsset = null;
+
+  const PaaxNavItem.svg({
+    required String outlined,
+    required String filled,
+    required this.label,
+  })  : outlinedAsset = outlined,
+        filledAsset = filled,
+        outlinedIcon = null,
+        filledIcon = null;
+
+  final IconData? outlinedIcon;
+  final IconData? filledIcon;
+  final String? outlinedAsset;
+  final String? filledAsset;
+  final String label;
+}
+
+/// Floating sculpted navigation capsule (UI Visual System V2 §4 / V3 §6).
+///
+/// Same destinations, icon identities and tap behaviour as the previous flat
+/// row; the selected state is a white elongated capsule — almost as tall as
+/// the bar, inset [PaaxLayout.navIndicatorInset] — that slides between
+/// equal-width slots, so the outer capsule never resizes.
+class PaaxBottomNavigation extends StatelessWidget {
+  const PaaxBottomNavigation({
+    super.key,
+    required this.items,
+    required this.currentIndex,
+    required this.onTap,
+    this.height = PaaxLayout.navHeight,
+  });
+
+  final List<PaaxNavItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onTap;
+  final double height;
+
+  /// Glyph size inside the capsule.
+  static const double iconSize = 28;
+
+  /// Active indicator width for a slot of [slotWidth]: the token width, but
+  /// never wider than the slot minus the same inset the indicator keeps from
+  /// the capsule's top and bottom edges.
+  static double indicatorWidth(double slotWidth) {
+    final max = slotWidth - 2 * PaaxLayout.navIndicatorInset;
+    return PaaxLayout.navIndicatorWidth.clamp(0.0, max < 0 ? 0.0 : max);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final count = items.length;
+    final alignX = count <= 1 ? 0.0 : -1.0 + 2.0 * currentIndex / (count - 1);
+    final indicatorHeight = height - 2 * PaaxLayout.navIndicatorInset;
+
+    return PaaxPillSurface(
+      height: height,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final slotWidth = constraints.maxWidth / count;
+          return Stack(
+            children: [
+              // Sliding white selection capsule — one slot wide, centred.
+              AnimatedAlign(
+                alignment: Alignment(alignX, 0),
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                child: SizedBox(
+                  width: slotWidth,
+                  height: height,
+                  child: Center(
+                    child: PaaxPillSurface(
+                      width: indicatorWidth(slotWidth),
+                      height: indicatorHeight,
+                      active: true,
+                      showShadow: false,
+                      child: const SizedBox.shrink(),
+                    ),
+                  ),
                 ),
               ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  for (var i = 0; i < count; i++) _slot(i, items[i]),
+                ],
+              ),
             ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  /// SVG-based nav icon for Home and Search.
-  Widget _navIconSvg(int index, String outlinedAsset, String filledAsset) {
-    final isSelected = _currentIndex == index;
-    final color = isSelected ? Colors.white : Colors.white54;
-    final asset = isSelected ? filledAsset : outlinedAsset;
+  Widget _slot(int index, PaaxNavItem item) {
+    final selected = index == currentIndex;
+    final color = selected
+        ? PaaxPillTheme.activeForeground
+        : PaaxPillTheme.inactiveForeground;
+    final Widget glyph;
+    if (item.outlinedAsset != null) {
+      glyph = SizedBox(
+        width: iconSize,
+        height: iconSize,
+        child: SvgPicture.asset(
+          selected ? item.filledAsset! : item.outlinedAsset!,
+          colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+          fit: BoxFit.contain,
+        ),
+      );
+    } else {
+      glyph = Icon(
+        selected ? item.filledIcon : item.outlinedIcon,
+        color: color,
+        size: iconSize,
+      );
+    }
     return Expanded(
-      child: GestureDetector(
-        onTap: () => _onTabTapped(index),
-        behavior: HitTestBehavior.translucent,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.max,
-          children: [
-            SizedBox(
-              width: 33,
-              height: 33,
-              child: SvgPicture.asset(
-                asset,
-                colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
-                fit: BoxFit.contain,
-              ),
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 3),
-              Container(
-                width: 4,
-                height: 4,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ],
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: item.label,
+        child: GestureDetector(
+          onTap: () => onTap(index),
+          behavior: HitTestBehavior.translucent,
+          child: SizedBox.expand(child: Center(child: glyph)),
         ),
       ),
     );

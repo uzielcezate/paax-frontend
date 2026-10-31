@@ -21,6 +21,8 @@ import '../../core/image/lh3_url_builder.dart';
 import '../widgets/bottom_content_padding.dart';
 import '../widgets/glass_surface.dart';
 import '../widgets/genre_card.dart';
+import '../widgets/paax_pill.dart';
+import '../widgets/paax_top_bar.dart';
 import 'genre_results_screen.dart';
 
 import '../../core/utils/responsive.dart';
@@ -35,10 +37,16 @@ import '../../core/utils/responsive.dart';
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _searchFocus = FocusNode();
   // ValueNotifier for clear-button visibility — avoids full setState on every keystroke
   late final ValueNotifier<bool> _hasText;
   final ValueNotifier<double> _scrollOffset = ValueNotifier(0.0);
   String _selectedFilter = 'All';
+
+  // V3 §8.2 — dedicated search-input mode. Entered when the field gains focus
+  // (or already holds a query); left via the X pill, which restores the
+  // default browse screen. Pure so it is unit-testable.
+  bool _searchMode = false;
 
   @override
   void initState() {
@@ -46,9 +54,31 @@ class _SearchScreenState extends State<SearchScreen> {
     _hasText = ValueNotifier(_textController.text.isNotEmpty);
     _textController.addListener(() {
       _hasText.value = _textController.text.isNotEmpty;
+      _syncSearchMode();
     });
+    _searchFocus.addListener(_syncSearchMode);
     _scrollController.addListener(() {
       _scrollOffset.value = _scrollController.offset;
+    });
+  }
+
+  void _syncSearchMode() {
+    final next = SearchScreenMode.isSearchMode(
+      hasFocus: _searchFocus.hasFocus,
+      hasText: _textController.text.isNotEmpty,
+    );
+    if (next != _searchMode && mounted) setState(() => _searchMode = next);
+  }
+
+  /// X pill: leave search mode and restore the default browse screen without
+  /// navigating away from the Search tab.
+  void _exitSearchMode(app_search.SearchController search) {
+    _searchFocus.unfocus();
+    _textController.clear();
+    search.onQueryChanged("");
+    setState(() {
+      _selectedFilter = 'All';
+      _searchMode = false;
     });
   }
 
@@ -56,6 +86,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void dispose() {
     _hasText.dispose();
     _textController.dispose();
+    _searchFocus.dispose();
     _scrollController.dispose();
     _scrollOffset.dispose();
     super.dispose();
@@ -63,11 +94,22 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final search = context.watch<app_search.SearchController>(); 
+    final search = context.watch<app_search.SearchController>();
     final double topPadding = MediaQuery.of(context).padding.top;
-    
-    // Header: status bar + back/search row (40) + gap (10) + chips (34) + gap (12)
-    final double headerHeight = topPadding + 8 + 40 + 10 + 34 + 12;
+    final double inset = PaaxLayout.floatingInset(context);
+    final bool showPills = SearchScreenMode.showFilterPills(
+      searchMode: _searchMode,
+      hasText: _textController.text.isNotEmpty,
+    );
+
+    // Header: status bar + 8 + back/search row (44) + [10 + pills (34 + 8
+    // shadow room)] + 4. The pinned header and the scroll spacer share it.
+    final double headerHeight = SearchScreenMode.headerHeight(
+      topPadding: topPadding,
+      showPills: showPills,
+    );
+    // Fade plateau ends at the vertical centre of the lowest pinned control.
+    final double fadePlateau = headerHeight - SearchScreenMode.plateauLift;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -82,98 +124,86 @@ class _SearchScreenState extends State<SearchScreen> {
               ],
             ),
           ),
-          // ── Bottom edge fade ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: Container(
-                height: context.read<PlaybackController>().currentTrack != null ? 240 : 160,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.96),
-                      AppColors.background.withValues(alpha: 0.65),
-                      AppColors.background.withValues(alpha: 0.25),
-                      AppColors.background.withValues(alpha: 0.0),
-                    ],
-                    stops: const [0.0, 0.35, 0.65, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          // Pinned top controls: back + search bar, then chips, then scroll-triggered fade below
+          // (V4 §1) The bottom fade is painted once by the MainWrapper dock;
+          // no per-screen bottom gradient here, so nothing stacks.
+          // Pinned top controls over one atmospheric fade (V3 §4/§5): no
+          // opaque rectangle — the fade plateaus behind the controls and
+          // dissolves below the lowest pill, following scroll.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
-                Container(
-                  color: AppColors.background,
-                  padding: EdgeInsets.only(
-                    top: topPadding + 8,
-                    bottom: 12,
+                ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffset,
+                  builder: (_, offset, __) => PaaxHeaderFade(
+                    plateau: fadePlateau,
+                    opacity: (offset / 40.0).clamp(0.0, 1.0),
                   ),
+                ),
+                Padding(
+                  padding: EdgeInsets.only(top: topPadding + 8, bottom: 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // 1. Back button + Search pill (top row)
+                      // 1. Back / X pill + Search pill (top row), both
+                      // 44dp tall, outer edges on the shared inset.
                       Padding(
-                        padding: EdgeInsets.only(right: Responsive.spacing(context)),
+                        padding: EdgeInsets.only(right: inset),
                         child: SizedBox(
-                          height: 40,
+                          height: PaaxLayout.topBarPill,
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Back icon — uses same left:4 + IconButton as detail screens
                               Padding(
-                                padding: const EdgeInsets.only(left: 4),
-                                child: IconButton(
-                                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
-                                  onPressed: () {
-                                    final mainWrapper = MainWrapper.shellKey.currentState;
-                                    if (mainWrapper != null) {
-                                      mainWrapper.onBackPressed();
-                                    } else {
-                                      Navigator.maybePop(context);
-                                    }
-                                  },
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-                                ),
+                                padding: EdgeInsets.only(
+                                    left: PaaxTopBar.controlOffset(inset)),
+                                child: _searchMode
+                                    ? PaaxIconPill(
+                                        key: const Key('search_close'),
+                                        icon: Icons.close_rounded,
+                                        iconSize: 22,
+                                        semanticLabel: 'Close search',
+                                        onTap: () => _exitSearchMode(search),
+                                      )
+                                    : PaaxIconPill(
+                                        key: const Key('search_back'),
+                                        icon: Icons.arrow_back_ios_new_rounded,
+                                        iconSize: PaaxTopBar.backIconSize,
+                                        semanticLabel: 'Back',
+                                        onTap: () {
+                                          final mainWrapper = MainWrapper.shellKey.currentState;
+                                          if (mainWrapper != null) {
+                                            mainWrapper.onBackPressed();
+                                          } else {
+                                            Navigator.maybePop(context);
+                                          }
+                                        },
+                                      ),
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 8),
                               Expanded(
-                                child: Container(
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surface,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
+                                child: PaaxSearchPill(
+                                  height: PaaxLayout.topBarPill,
                                   child: TextField(
                                     controller: _textController,
+                                    focusNode: _searchFocus,
                                     style: const TextStyle(color: Colors.white, fontSize: 14),
                                     decoration: InputDecoration(
                                       hintText: "What do you want to listen to?",
-                                      hintStyle: TextStyle(color: Colors.white.withOpacity(0.35), fontSize: 13),
-                                      prefixIcon: Icon(Icons.search, color: Colors.white.withOpacity(0.5), size: 18),
+                                      hintStyle: const TextStyle(color: PaaxPillTheme.placeholder, fontSize: 13),
+                                      prefixIcon: const Icon(Icons.search, color: PaaxPillTheme.placeholder, size: 18),
                                       filled: false,
                                       border: InputBorder.none,
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                                       isDense: true,
                                       suffixIcon: ValueListenableBuilder<bool>(
                                         valueListenable: _hasText,
                                         builder: (_, hasText, __) => hasText
                                             ? IconButton(
-                                                icon: Icon(Icons.clear, color: Colors.white.withOpacity(0.4), size: 18),
+                                                icon: Icon(Icons.clear, color: Colors.white.withValues(alpha: 0.4), size: 18),
                                                 onPressed: () {
                                                   _textController.clear();
                                                   search.onQueryChanged("");
@@ -192,71 +222,24 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                       ),
-                      
-                      const SizedBox(height: 10),
-                      
-                      // 2. Filter chips (below search bar)
-                      SizedBox(
-                        height: 34,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          physics: const ClampingScrollPhysics(),
-                          primary: false,
-                          padding: const EdgeInsets.only(left: 16),
-                          children: ["All", "Tracks", "Albums", "Artists"].map((filter) {
-                            final isSelected = _selectedFilter == filter;
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: GestureDetector(
-                                onTap: () => setState(() => _selectedFilter = filter),
-                                child: Container(
-                                  alignment: Alignment.center,
-                                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                                  decoration: BoxDecoration(
-                                    color: isSelected ? Colors.white : AppColors.surface,
-                                    borderRadius: BorderRadius.circular(17),
-                                  ),
-                                  child: Text(
-                                    filter,
-                                    style: TextStyle(
-                                      color: isSelected ? AppColors.background : Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
+
+                      // 2. Filter pills (below search bar). Hidden in
+                      // search mode until there is a query — the results
+                      // flow switches on them.
+                      if (showPills) ...[
+                        const SizedBox(height: 10),
+                        PaaxSegmentedPills(
+                          labels: _searchFilters,
+                          selectedIndex: _searchFilters.indexOf(_selectedFilter),
+                          onSelected: (i) =>
+                              setState(() => _selectedFilter = _searchFilters[i]),
+                          height: 34,
+                          gap: 8,
+                          padding: EdgeInsets.only(left: inset, right: 8),
                         ),
-                      ),
+                      ],
                     ],
                   ),
-                ),
-                // Scroll-triggered fade tail below controls
-                ValueListenableBuilder<double>(
-                  valueListenable: _scrollOffset,
-                  builder: (_, offset, __) {
-                    final fadeOpacity = (offset / 8.0).clamp(0.0, 1.0);
-                    return IgnorePointer(
-                      child: Opacity(
-                        opacity: fadeOpacity,
-                        child: Container(
-                          height: 45,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppColors.background,
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
                 ),
               ],
             ),
@@ -267,6 +250,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ... (Genre Data skipped)
+  static const List<String> _searchFilters = ["All", "Tracks", "Albums", "Artists"];
+
   final List<Map<String, dynamic>> _genres = [
     {"name": "Pop", "colors": [const Color(0xFF8A2387), const Color(0xFFE94057), const Color(0xFFF27121)]},
     {"name": "Rock", "colors": [const Color(0xFF232526), const Color(0xFF414345)]},
@@ -305,10 +290,16 @@ class _SearchScreenState extends State<SearchScreen> {
     const topContentPadding = SliverToBoxAdapter(child: SizedBox(height: 12));
 
     if (_textController.text.isEmpty) {
+      if (_searchMode) {
+        // Dedicated search-input mode, empty query. Intentionally empty: a
+        // future version renders local search history (+ Clear History) here.
+        // No storage, no placeholders now (V3 §8.2).
+        return const [SliverFillRemaining(hasScrollBody: false, child: SizedBox.shrink())];
+      }
       return [
          topContentPadding,
          SliverPadding(
-           padding: EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+           padding: EdgeInsets.symmetric(horizontal: PaaxLayout.floatingInset(context)),
            sliver: SliverToBoxAdapter(
              child: Padding(
                padding: const EdgeInsets.only(bottom: 16),
@@ -317,7 +308,7 @@ class _SearchScreenState extends State<SearchScreen> {
            ),
          ),
          SliverPadding(
-           padding: EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+           padding: EdgeInsets.symmetric(horizontal: PaaxLayout.floatingInset(context)),
            sliver: SliverGrid(
              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                maxCrossAxisExtent: 200, // Responsive tiles
@@ -667,7 +658,7 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Widget> _buildAlbumsGridSlivers(List<SavedAlbum> albums) {
     return [
       SliverPadding(
-        padding: EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+        padding: EdgeInsets.symmetric(horizontal: PaaxLayout.floatingInset(context)),
         sliver: SliverGrid(
            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                maxCrossAxisExtent: 200, 
@@ -703,4 +694,34 @@ class _SearchScreenState extends State<SearchScreen> {
       const SliverToBoxAdapter(child: BottomContentPadding()),
     ];
   }
+}
+
+/// Pure state/geometry helpers for the Search screen header (V3 §8), kept
+/// free of widgets so the focus-mode contract is unit-testable.
+class SearchScreenMode {
+  SearchScreenMode._();
+
+  /// Search mode is on while the field has focus or already holds a query, so
+  /// tapping a result (which drops focus) does not snap back to Browse All.
+  static bool isSearchMode({required bool hasFocus, required bool hasText}) =>
+      hasFocus || hasText;
+
+  /// Category pills are part of the default browse screen and of the results
+  /// flow (they switch All / Tracks / Albums / Artists). They are hidden only
+  /// in search mode with an empty query.
+  static bool showFilterPills({required bool searchMode, required bool hasText}) =>
+      !searchMode || hasText;
+
+  static const double rowTop = 8;
+  static const double rowHeight = PaaxLayout.topBarPill; // 44
+  static const double pillsGap = 10;
+  static const double pillsRow = 34 + PaaxSegmentedPills.shadowRoom; // 42
+  static const double bottom = 4;
+
+  /// Distance from the header's bottom edge up to the vertical centre of the
+  /// lowest pinned control (pill row centre, or the search row centre).
+  static const double plateauLift = bottom + pillsRow / 2;
+
+  static double headerHeight({required double topPadding, required bool showPills}) =>
+      topPadding + rowTop + rowHeight + (showPills ? pillsGap + pillsRow : 0) + bottom;
 }

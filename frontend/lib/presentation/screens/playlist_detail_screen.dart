@@ -16,7 +16,6 @@ import '../../data/remote/playlist_realtime_service.dart';
 import '../widgets/playlist_activity_timeline_sheet.dart';
 import '../widgets/playlist_collaborators_sheet.dart';
 import '../widgets/track_list_tile.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/bottom_content_padding.dart';
 import '../widgets/playlist_cover.dart';
 import '../widgets/add_to_playlist_sheet.dart';
@@ -25,6 +24,8 @@ import '../widgets/overflow_menu.dart';
 import '../widgets/sort_bottom_sheet.dart';
 import '../../core/utils/dominant_color_service.dart';
 import '../widgets/app_image.dart';
+import '../widgets/paax_top_bar.dart';
+import '../widgets/paax_pill.dart';
 import '../../core/image/lh3_url_builder.dart';
 
 class PlaylistDetailScreen extends StatefulWidget {
@@ -380,7 +381,7 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
 
                       // Foreground Rigid Layout
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        padding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context)),
                         child: Builder(
                           builder: (context) {
                             final double screenWidth = MediaQuery.of(context).size.width;
@@ -886,78 +887,25 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
           ),
 
           // ── 3. Edge Fades for Cinematic Transitions ──
-          DynamicEdgeFade.dynamicBottom(
-            key: ValueKey('fade_bot_playlist_${widget.playlist.id}'),
-            color: AppColors.background,
-            height: 120,
-          ),
+          // (V4 §1) bottom fade is painted once by the MainWrapper dock.
 
-          // ── 4. Clean local top navigation bar ──
+          // ── 4. Local top navigation bar (sculpted pills) ──
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  color: (_showTitle || _isEditMode) ? AppColors.background : Colors.transparent,
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top,
-                  ),
-                  child: SizedBox(
-                    height: kEditOrderBarHeight,
-                    child: Stack(
-                      children: [
-                        // Left: back button — fixed position
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
-                              onPressed: () {
-                                if (_isEditMode) {
-                                  _exitEditMode();
-                                } else {
-                                  Navigator.pop(context);
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        // Center: title — absolute center, independent of icons
-                        Positioned.fill(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: (_showTitle || _isEditMode) ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 56),
-                                child: Text(
-                                  _isEditMode ? 'Edit Order' : currentPlaylist.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Right: menu or check button — fixed position
-                        Positioned(
-                          right: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _isEditMode
+            child: PaaxTopBar(
+              title: _isEditMode ? 'Edit Order' : currentPlaylist.name,
+              showTitle: _showTitle || _isEditMode,
+              height: kEditOrderBarHeight,
+              onBack: () {
+                if (_isEditMode) {
+                  _exitEditMode();
+                } else {
+                  Navigator.pop(context);
+                }
+              },
+              trailing: _isEditMode
                                 ? IconButton(
                                     icon: Icon(Icons.check_rounded,
                                         color: _savingOrder
@@ -1019,28 +967,6 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
                                       ),
                                     ),
                                   ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Soft bottom fade overlay
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        (_showTitle || _isEditMode) ? AppColors.background : Colors.transparent,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -1057,24 +983,30 @@ class _PlaylistDetailScreenState extends State<PlaylistDetailScreen> {
     double iconSize = 22,
     bool primary = false,
   }) {
+    // UI Visual System V2 §8: same width/height/icon size as before; only the
+    // surface changed. The primary Play stays a flat white disc.
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: primary ? Colors.white : Colors.white.withValues(alpha: 0.08),
-          border: primary ? null : Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
-        ),
-        child: Center(
-          child: Icon(
-            icon,
-            color: primary ? const Color(0xFF121212) : Colors.white,
-            size: iconSize,
-          ),
-        ),
-      ),
+      behavior: HitTestBehavior.opaque,
+      child: primary
+          ? Container(
+              width: size,
+              height: size,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+              child: Center(
+                child: Icon(icon, color: const Color(0xFF121212), size: iconSize),
+              ),
+            )
+          : PaaxPillSurface(
+              width: size,
+              height: size,
+              child: Center(
+                child: Icon(icon, color: Colors.white, size: iconSize),
+              ),
+            ),
     );
   }
 

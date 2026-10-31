@@ -18,6 +18,8 @@ import '../../domain/entities/playlist_activity.dart' show ActivitySummary;
 import '../state/library_controller.dart';
 import '../state/notification_controller.dart';
 import '../widgets/actor_avatar.dart';
+import '../widgets/paax_pill.dart';
+import '../widgets/paax_top_bar.dart';
 import 'playlist_detail_screen.dart';
 
 typedef _RowFetcher = Future<Map<String, dynamic>?> Function(String id);
@@ -101,15 +103,17 @@ class _TopBar extends StatelessWidget {
     final hasUnread =
         context.select<NotificationController, bool>((c) => c.unreadCount > 0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 6, 12, 6),
+      padding: EdgeInsets.fromLTRB(
+          PaaxTopBar.controlOffset(PaaxLayout.floatingInset(context)), 6, 12, 6),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                color: Colors.white, size: 22),
-            onPressed: () => Navigator.of(context).maybePop(),
-            tooltip: 'Back',
+          PaaxIconPill(
+            icon: Icons.arrow_back_ios_new_rounded,
+            iconSize: PaaxTopBar.backIconSize,
+            semanticLabel: 'Back',
+            onTap: () => Navigator.of(context).maybePop(),
           ),
+          const SizedBox(width: 6),
           const Expanded(
             child: Text('Notifications',
                 style: TextStyle(

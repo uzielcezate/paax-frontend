@@ -72,6 +72,20 @@ Source: `AppColors`. Note the surface palette is intentionally **flat** — thre
 
 ---
 
+### Sculpted pill tokens (`PaaxPillTheme`, `paax_pill.dart`)
+
+| Token | Value | Notes |
+|-------|-------|-------|
+| `fill` | `#111111` | Uniform opaque pill fill (V3; the V2 gradient was removed). |
+| `bevel` | `#666666` | 1px highlight stroke; opacity 0.50 top → 0.16 sides → 0 bottom. |
+| `fadeColor` ramps | `#080808` @ 0 → 8 → 22 → 45 → 72 → 95 % | `PaaxFade.ramp` — every header/dock fade uses this long ramp, never a two-stop edge. |
+| `searchBorder` | `#191919` | Quieter bevel for search fields. |
+| `activeFill` / `activeForeground` | `#FFFFFF` / `#080808` | Monochrome selection (nav, tabs). No red/blue/purple active states. |
+| `inactiveForeground` | `#A0A0A0` | Inactive nav glyphs / tab text. |
+| `placeholder` | `#8A8A8A` | Search icon + hint. |
+
+---
+
 ## Text Colors
 
 | Token | Value | Purpose |
