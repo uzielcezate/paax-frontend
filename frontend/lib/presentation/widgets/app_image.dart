@@ -130,14 +130,30 @@ class _AppImageState extends State<AppImage> {
         ImageRequestQueue.instance.cancel(_requestId!);
         _requestId = null;
       }
+      // The URL changed while this widget is already on screen (e.g. a detail
+      // header swapping the list thumbnail for the fetched full artwork).
+      // VisibilityDetector only reports *changes* in visibility, so without
+      // this the new URL would never be requested and the placeholder would
+      // stay forever. Re-request load permission for the new URL.
+      if (!_canLoad && _isVisible && widget.url.isNotEmpty) {
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!_disposed && mounted) {
+            _requestLoadPermission();
+          }
+        });
+      }
     }
   }
 
+  /// Last visibility reported by the VisibilityDetector.
+  bool _isVisible = false;
+
   void _onVisibilityChanged(VisibilityInfo info) {
     if (_disposed) return;
-    
+
     final isVisible = info.visibleFraction > 0;
-    
+    _isVisible = isVisible;
+
     if (isVisible && !_canLoad) {
       // Retry if we had an error and cooldown has expired
       if (_hasError && !ImageRequestQueue.instance.isInCooldown(_sizedUrl)) {
