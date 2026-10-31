@@ -156,7 +156,7 @@ The tokens are those of a throwaway identity that the server deletes at expiry; 
 | Railway `paax-api` | `SUPABASE_ANON_KEY` | legacy anon JWT — only consulted when `SUPABASE_PUBLISHABLE_KEY` is empty (backward compatibility). Never set an `sb_secret_` key here (rejected at startup). |
 | Railway `paax-api` | `FRONTEND_ORIGINS` | replace the current wildcard `*` with the explicit allowlist `https://paaxmusic.app,https://www.paaxmusic.app,https://demo.paaxmusic.app,https://uzielsandoval.com,https://www.uzielsandoval.com` (see *CORS allowlist audit* below) |
 | Railway `paax-api` | `FRONTEND_ORIGIN_REGEX` | optional, only while testing Cloudflare Pages previews: `https://[a-z0-9-]+\.<pages-project>\.pages\.dev`; remove afterwards |
-| Railway `paax-api` | `DEMO_ENABLED` | `true` (default) — set `false` to kill the feature instantly |
+| Railway `paax-api` | `DEMO_ENABLED` | **`false` by default** (unset = disabled, `/v2/demo/*` answers 503 `DEMO_DISABLED`). Set `true` only at activation time; set `false` to kill the feature instantly |
 | Railway `paax-api` | `DEMO_SESSION_SECONDS`, `DEMO_RATE_LIMIT_PER_IP`, `DEMO_RATE_LIMIT_WINDOW_SECONDS`, `DEMO_RATE_LIMIT_GLOBAL`, `DEMO_EMAIL_DOMAIN`, `DEMO_DISPLAY_NAME`, `DEMO_WEB_URL` | optional overrides (defaults 600 / 6 / 600 / 120 / `demo.paaxmusic.app` / `Demo Visitor` / `https://paaxmusic.app/?demo=1`) |
 | Supabase | migration `20261030000000_demo_sessions.sql` | apply after review |
 | Web host | CSP `frame-ancestors` | see above |

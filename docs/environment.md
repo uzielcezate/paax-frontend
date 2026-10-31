@@ -29,7 +29,7 @@ Paax spans four deployables. The tables below are grouped by where the variable 
 | `PORT` | Railway auto-sets | uvicorn listen port | `8080` |
 | `SUPABASE_PUBLISHABLE_KEY` | Preferred for demo sessions | **Public** modern API key (`sb_publishable_…`); used only as the `apikey` header for the GoTrue password grant that turns a freshly minted demo identity into a session. Opaque string, not a JWT. Never an `sb_secret_` key (rejected). | `sb_publishable_...` |
 | `SUPABASE_ANON_KEY` | Legacy fallback for demo sessions | **Public** legacy anon JWT; only used when `SUPABASE_PUBLISHABLE_KEY` is empty. | `eyJ...` |
-| `DEMO_ENABLED` | Optional | Kill switch for `/v2/demo/*` (default `true`) | `false` |
+| `DEMO_ENABLED` | Optional | Opt-in switch for `/v2/demo/*` (default `false`; unset = disabled, 503 `DEMO_DISABLED`) | `true` |
 | `DEMO_SESSION_SECONDS` | Optional | Demo lifetime (default `600`) | `600` |
 | `DEMO_RATE_LIMIT_PER_IP` / `DEMO_RATE_LIMIT_WINDOW_SECONDS` / `DEMO_RATE_LIMIT_GLOBAL` | Optional | Session-creation limits (defaults `6` / `600` / `120` per hour) | — |
 | `DEMO_EMAIL_DOMAIN` / `DEMO_DISPLAY_NAME` / `DEMO_WEB_URL` | Optional | Generated identity email domain, display name, launch URL echoed to the portfolio (defaults `demo.paaxmusic.app` / `Demo Visitor` / `https://paaxmusic.app/?demo=1`) | — |
