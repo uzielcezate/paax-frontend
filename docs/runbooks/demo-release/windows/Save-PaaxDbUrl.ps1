@@ -16,10 +16,22 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 
-if ($SecretDir -like "*\OneDrive\*") { throw "SecretDir must not be inside OneDrive." }
+# Refuse any location under a OneDrive-synchronised tree: normalise to an absolute path and inspect each folder
+# name (e.g. "OneDrive", "OneDrive - Personal", "OneDrive - <Org>"), plus the OneDrive roots the client reports.
+$fullDir  = [IO.Path]::GetFullPath($SecretDir).TrimEnd('\')
+$segments = $fullDir -split '\\'
+if ($segments | Where-Object { $_ -match '^OneDrive( - .+)?$' }) { throw "SecretDir '$fullDir' is inside a OneDrive folder. Choose a path outside OneDrive." }
+foreach ($root in @($env:OneDrive, $env:OneDriveConsumer, $env:OneDriveCommercial)) {
+  if ($root) {
+    $r = [IO.Path]::GetFullPath($root).TrimEnd('\')
+    if ($fullDir.Equals($r, [StringComparison]::OrdinalIgnoreCase) -or $fullDir.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "SecretDir '$fullDir' is inside the OneDrive root '$r'." }
+  }
+}
+$SecretDir = $fullDir
 if (-not (Test-Path $SecretDir)) { New-Item -ItemType Directory -Path $SecretDir | Out-Null }
-# restrict the folder to the current user only (no inheritance)
-icacls $SecretDir /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" | Out-Null
+# restrict the folder to the current user only (no inheritance); abort before saving anything if this fails
+$icaclsOut = & icacls $SecretDir /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" 2>&1
+if ($LASTEXITCODE -ne 0) { throw "icacls failed (exit $LASTEXITCODE) while restricting '$SecretDir'; nothing saved. Output: $($icaclsOut -join ' ')" }
 
 Write-Host ""
 Write-Host "Paste the Session pooler URI and press Enter. Nothing is echoed while you paste." -ForegroundColor Cyan
