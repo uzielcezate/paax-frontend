@@ -7,5 +7,6 @@ create schema if not exists private;
 create extension if not exists pgcrypto with schema extensions;
 create extension if not exists "uuid-ossp" with schema extensions;
 create extension if not exists pg_stat_statements with schema extensions;
+create extension if not exists pg_trgm with schema extensions;   -- trigram indexes on search columns
 create extension if not exists supabase_vault cascade;
 create publication supabase_realtime;

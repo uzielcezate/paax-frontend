@@ -59,6 +59,7 @@ foreach ($f in 'managed_schema.sql', 'schema.sql', 'data.sql') { docker cp (Join
 docker cp (Join-Path $RunbookDir '06_backup_fingerprint.sql') "${Container}:/tmp/paax/06.sql" | Out-Null
 
 $harmless = @(
+  'schema "(public|private)" already exists',            # pg_dump emits CREATE SCHEMA; template0 has public, fixtures create private
   'can only create extension in database postgres',
   'relation "supabase_functions.hooks" does not exist',
   'function private.handle_new_user\(\) does not exist',

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Runs INSIDE the isolated container paax_verify_pg. Reads the connection URI from the FIRST LINE OF STDIN (never an
+# argument, never an env var set from the host), then performs ONE read-only operation against that database and
+# writes the result under /tmp/paax/out. Usage: sh /tmp/paax/dump.sh <kind>   (URI piped on stdin)
+#   preflight       psql 01_migration_audit.sql (echoed)           -> preflight_production.txt
+#   fingerprint     psql 06_backup_fingerprint.sql (unaligned)     -> fp_production.txt
+#   roles           pg_dumpall --roles-only --no-role-passwords     -> roles.sql
+#   schema          pg_dump --schema-only  -n public -n private     -> schema.sql
+#   managed_schema  pg_dump --schema-only  -n auth   -n storage     -> managed_schema.sql
+#   data            pg_dump --data-only    public+private+auth+storage (COPY) -> data.sql
+#   auth_data       pg_dump --data-only    -n auth                  -> auth_data.sql   (spare copy)
+#   storage_data    pg_dump --data-only    -n storage               -> storage_data.sql (spare copy)
+set -u
+IFS= read -r U || exit 90
+U=$(printf '%s' "$U" | tr -d '\r\n')   # PowerShell pipes CRLF line endings
+U=${U#"$(printf '\357\273\277')"}      # ...and a UTF-8 BOM in front of native stdin (PowerShell 5.1)
+[ -n "$U" ] || exit 91
+mkdir -p /tmp/paax/out
+export PGCONNECT_TIMEOUT=20
+case "${1:-}" in
+  preflight)      psql "$U" --echo-queries -v ON_ERROR_STOP=0 -f /tmp/paax/01.sql > /tmp/paax/out/preflight_production.txt 2>&1 ;;
+  fingerprint)    psql "$U" -At -q -v ON_ERROR_STOP=1 -f /tmp/paax/06.sql > /tmp/paax/out/fp_production.txt 2>&1 ;;
+  roles)          pg_dumpall -d "$U" --roles-only --no-role-passwords > /tmp/paax/out/roles.sql 2> /tmp/paax/out/err.txt ;;
+  schema)         pg_dump "$U" --schema-only -n public -n private > /tmp/paax/out/schema.sql 2> /tmp/paax/out/err.txt ;;
+  managed_schema) pg_dump "$U" --schema-only -n auth -n storage > /tmp/paax/out/managed_schema.sql 2> /tmp/paax/out/err.txt ;;
+  data)           pg_dump "$U" --data-only -n public -n private -n auth -n storage > /tmp/paax/out/data.sql 2> /tmp/paax/out/err.txt ;;
+  auth_data)      pg_dump "$U" --data-only -n auth > /tmp/paax/out/auth_data.sql 2> /tmp/paax/out/err.txt ;;
+  storage_data)   pg_dump "$U" --data-only -n storage > /tmp/paax/out/storage_data.sql 2> /tmp/paax/out/err.txt ;;
+  *) echo "unknown kind: ${1:-}" >&2; exit 92 ;;
+esac
+rc=$?
+unset U
+# never echo the URI: stderr of the dump tools is saved to err.txt (scrubbed on the host) and only its size is printed
+[ -s /tmp/paax/out/err.txt ] && echo "stderr bytes: $(wc -c < /tmp/paax/out/err.txt)"
+exit $rc

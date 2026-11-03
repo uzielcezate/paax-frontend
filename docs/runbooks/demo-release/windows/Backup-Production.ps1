@@ -58,48 +58,48 @@ Write-Host "backup folder : $out"
 Write-Host "target        : $masked"
 
 Ensure-Container
-docker exec $Container sh -c "mkdir -p /tmp/paax" | Out-Null
+docker exec $Container sh -c "rm -rf /tmp/paax && mkdir -p /tmp/paax/out" | Out-Null
 docker cp (Join-Path $RunbookDir '01_migration_audit.sql')    "${Container}:/tmp/paax/01.sql" | Out-Null
 docker cp (Join-Path $RunbookDir '06_backup_fingerprint.sql') "${Container}:/tmp/paax/06.sql" | Out-Null
+docker cp (Join-Path $PSScriptRoot 'container_dump.sh')       "${Container}:/tmp/paax/dump.sh" | Out-Null
+docker exec $Container sh -c "sed -i 's/\r$//' /tmp/paax/dump.sh" | Out-Null
 
-# -- read-only queries against production (psql runs inside the container; URL passed as env, not argv of psql) --
-Write-Host "== preflight 01_migration_audit.sql (read-only)"
-$pre = docker exec -e "PAAX_DB_URL=$url" $Container sh -c 'psql "$PAAX_DB_URL" --echo-queries -v ON_ERROR_STOP=0 -f /tmp/paax/01.sql 2>&1'
-$preText = Scrub (($pre | ForEach-Object { "$_" }) -join "`n") $url
+# Every production operation runs inside the container; the URI travels ONLY over stdin (first line), never as a
+# command-line argument or a host-set environment variable, and the tools' stderr is scrubbed before it is kept.
+$log = Join-Path $out 'dump_log.txt'
+Set-Content -Path $log -Value "pg_dump/psql log $stamp (URI scrubbed)" -Encoding utf8
+function Run-InContainer([string]$kind, [string]$file, [int]$minBytes) {
+  Write-Host "== $kind -> $file"
+  $ErrorActionPreference = 'Continue'   # PS 5.1 turns native stderr into terminating errors under 'Stop'
+  $res  = $url | docker exec -i $Container sh /tmp/paax/dump.sh $kind 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = 'Stop'
+  $err  = docker exec $Container sh -c "cat /tmp/paax/out/err.txt 2>/dev/null; rm -f /tmp/paax/out/err.txt" | ForEach-Object { "$_" }
+  $txt  = Scrub ((@($res | ForEach-Object { "$_" }) + @($err)) -join "`n") $url
+  Add-Content -Path $log -Value ("--- {0} (exit {1})`n{2}" -f $kind, $code, $txt) -Encoding utf8
+  docker cp "${Container}:/tmp/paax/out/$file" (Join-Path $out $file) | Out-Null
+  $p = Join-Path $out $file
+  if ($code -ne 0 -or -not (Test-Path $p) -or (Get-Item $p).Length -lt $minBytes) { Write-Host $txt; throw ("{0} failed (exit {1})" -f $kind, $code) }
+  if ($txt -match 'could not connect|password authentication failed|Tenant or user not found|FATAL|pg_dump: error') { Write-Host $txt; throw "$kind reported an error (see above)" }
+}
+
+Run-InContainer 'preflight'   'preflight_production.txt' 500
+$preText = Scrub ((Get-Content (Join-Path $out 'preflight_production.txt')) -join "`n") $url
 Set-Content -Path (Join-Path $out 'preflight_production.txt') -Value $preText -Encoding utf8
-if ($preText -match 'could not connect|password authentication failed|Tenant or user not found|SSL') { Write-Host $preText; throw "preflight could not run against production (see above)" }
+if ($preText -match 'could not connect|password authentication failed|Tenant or user not found|FATAL') { Write-Host $preText; throw "preflight could not run against production (see above)" }
 
-Write-Host "== fingerprint 06_backup_fingerprint.sql on production (read-only)"
-$fp = docker exec -e "PAAX_DB_URL=$url" $Container sh -c 'psql "$PAAX_DB_URL" -At -q -v ON_ERROR_STOP=1 -f /tmp/paax/06.sql 2>&1'
-$fpText = Scrub (($fp | ForEach-Object { "$_" }) -join "`n") $url
+Run-InContainer 'fingerprint' 'fp_production.txt' 200
+$fpText = Scrub ((Get-Content (Join-Path $out 'fp_production.txt')) -join "`n") $url
 Set-Content -Path (Join-Path $out 'fp_production.txt') -Value $fpText -Encoding utf8
 if ($fpText -match 'ERROR|FATAL') { Write-Host $fpText; throw "fingerprint failed on production" }
 
-# -- dumps (Supabase CLI runs pg_dump in Docker; read-only) --
-$dumps = @(
-  @{ f = 'roles.sql';          a = @('--role-only') },
-  @{ f = 'schema.sql';         a = @() },
-  @{ f = 'managed_schema.sql'; a = @('--schema', 'auth,storage') },
-  @{ f = 'data.sql';           a = @('--data-only', '--use-copy') },
-  @{ f = 'auth_data.sql';      a = @('--data-only', '--use-copy', '--schema', 'auth') },
-  @{ f = 'storage_data.sql';   a = @('--data-only', '--use-copy', '--schema', 'storage') }
-)
-$log = Join-Path $out 'dump_log.txt'
-Set-Content -Path $log -Value "supabase db dump log $stamp (URL scrubbed)" -Encoding utf8
-Push-Location $out
-try {
-  foreach ($d in $dumps) {
-    Write-Host ("== dump {0} {1}" -f $d.f, ($d.a -join ' '))
-    $args = @('supabase', 'db', 'dump', '--db-url', $url) + $d.a + @('-f', $d.f)
-    $ErrorActionPreference = 'Continue'   # PS 5.1 turns native stderr (e.g. the CLI's deprecation warning) into errors under 'Stop'
-    $res  = & npx @args 2>&1
-    $code = $LASTEXITCODE
-    $ErrorActionPreference = 'Stop'
-    $txt  = Scrub (($res | ForEach-Object { "$_" }) -join "`n") $url
-    Add-Content -Path $log -Value ("--- {0} (exit {1})`n{2}" -f $d.f, $code, $txt) -Encoding utf8
-    if ($code -ne 0 -or -not (Test-Path $d.f) -or (Get-Item $d.f).Length -lt 100) { Write-Host $txt; throw ("dump {0} failed (exit {1})" -f $d.f, $code) }
-  }
-} finally { Pop-Location }
+Run-InContainer 'roles'          'roles.sql'          100
+Run-InContainer 'schema'         'schema.sql'         1000
+Run-InContainer 'managed_schema' 'managed_schema.sql' 1000
+Run-InContainer 'data'           'data.sql'           1000
+Run-InContainer 'auth_data'      'auth_data.sql'      100
+Run-InContainer 'storage_data'   'storage_data.sql'   100
+docker exec $Container sh -c "rm -rf /tmp/paax" | Out-Null
 
 # -- manifest --
 $files = Get-ChildItem $out -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' -and $_.Name -ne 'FILES.txt' }
