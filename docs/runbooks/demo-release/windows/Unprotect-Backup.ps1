@@ -5,7 +5,8 @@ param(
   [Parameter(Mandatory = $true)][string]$EncryptedFile,
   [string]$OutFile   = "",
   [string]$SecretDir = "C:\Users\uziel\PaaxSecrets",
-  [byte[]]$MasterKeyBytes = $null    # internal: used by Protect-Backup.ps1 for the round-trip proof
+  [byte[]]$MasterKeyBytes = $null,            # internal: used by Protect-Backup.ps1 for the round-trip proof
+  [securestring]$PassphraseSecure = $null     # passphrase-mode files: SecureString handed over in-process instead of a prompt
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
@@ -20,7 +21,7 @@ try {
   if ($MasterKeyBytes) { $master = $MasterKeyBytes }
   elseif ($mode -eq 1) { $master = [Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes((Join-Path $SecretDir 'backup_key.dpapi')), $null, [Security.Cryptography.DataProtectionScope]::CurrentUser) }
   elseif ($mode -eq 2) {
-    $sec = Read-Host -AsSecureString "Backup passphrase"
+    $sec = if ($PassphraseSecure) { $PassphraseSecure } else { Read-Host -AsSecureString "Backup passphrase" }
     $b = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec); $p = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($b); [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b)
     $master = (New-Object Security.Cryptography.Rfc2898DeriveBytes($p, $salt, 300000, [Security.Cryptography.HashAlgorithmName]::SHA256)).GetBytes(64); $p = $null
   } else { throw "unknown key mode $mode" }

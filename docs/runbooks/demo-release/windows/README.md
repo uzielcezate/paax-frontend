@@ -115,3 +115,11 @@ inner zip. Key modes:
 and restores the zip; `Expand-Archive` then gives the folder back for `Verify-Restore.ps1 -BackupDir`.
 `PaaxSecrets` holds the DB URI and the master key (both DPAPI, folder ACL = this user only): delete it after the
 release is stable, together with the `.paaxbak` once a newer backup exists.
+
+## 7. Portable recovery copy (independent of this Windows installation)
+
+`Make-PortableCopy.ps1` (run by you; asks for a recovery passphrase) decrypts the DPAPI copy, checks its SHA256
+against the recorded inner-zip hash, encrypts the same zip in passphrase mode to `<name>.portable.paaxbak`, and
+proves independence by decrypting the result with the passphrase only while the DPAPI key directory points at a
+non-existent folder, comparing SHA256 again. The DPAPI copy stays intact. `RESTORE_ON_ANOTHER_MACHINE.md` documents
+the file format, the restore steps on any Windows machine and where to keep the copy and the passphrase.
