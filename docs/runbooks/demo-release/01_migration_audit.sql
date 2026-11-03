@@ -3,7 +3,7 @@
 -- checks requested before applying; every query is a SELECT/SHOW and changes nothing.
 
 -- ── A. Recorded migration history ──────────────────────────────────────────────────────────────────────
-select version, name, inserted_at from supabase_migrations.schema_migrations order by version;
+select version, name from supabase_migrations.schema_migrations order by version;   -- (no inserted_at column in production)
 
 -- ── B. Demo objects must be ABSENT ────────────────────────────────────────────────────────────────────
 select
