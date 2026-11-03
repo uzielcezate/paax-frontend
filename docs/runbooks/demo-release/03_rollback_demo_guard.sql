@@ -6,7 +6,8 @@
 alter role authenticator reset pgrst.db_pre_request;
 notify pgrst, 'reload config';
 
--- 2. Stop the sweeper
+-- 2. Stop the sweeper. DECISION: the pg_cron extension itself stays installed (idle without jobs, zero cost,
+--    keeps a re-apply a pure re-run). Dropping it is a separate reviewed step: `drop extension pg_cron;`
 select cron.unschedule('paax_demo_cleanup');
 
 -- 3. Drop the demo-only functions and table (cascade removes policies/grants)

@@ -190,17 +190,25 @@ $$;
 
 revoke execute on function private.demo_cleanup(int, int) from public, anon, authenticated;
 
--- pg_cron is optional: schedule the sweep when the extension can be enabled.
+-- Cleanup scheduling is REQUIRED (fail-closed): if pg_cron cannot be installed
+-- or the job cannot be scheduled, this statement raises, and because the file
+-- is applied inside one transaction, nothing above is committed either — the
+-- demo infrastructure never exists without its sweeper.
+create extension if not exists pg_cron with schema pg_catalog;
+
 do $$
+declare
+  v_jobid bigint;
 begin
-  begin
-    create extension if not exists pg_cron with schema pg_catalog;
-  exception when others then
-    raise notice 'pg_cron not available (%): demo cleanup relies on the paax-api sweep', sqlerrm;
-    return;
-  end;
   perform cron.unschedule(jobid) from cron.job where jobname = 'paax_demo_cleanup';
-  perform cron.schedule('paax_demo_cleanup', '* * * * *', 'select private.demo_cleanup();');
+  v_jobid := cron.schedule('paax_demo_cleanup', '* * * * *', 'select private.demo_cleanup();');
+  if v_jobid is null or not exists (
+    select 1 from cron.job
+    where jobid = v_jobid and jobname = 'paax_demo_cleanup' and active
+      and command = 'select private.demo_cleanup();'
+  ) then
+    raise exception 'paax_demo_cleanup job was not scheduled; aborting the demo migration';
+  end if;
 end;
 $$;
 

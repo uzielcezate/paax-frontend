@@ -286,11 +286,14 @@ byte-identical to the baseline.
 | `DEMO_ENABLED` | **unset / `false`** at stage 3; `true` only at stage 7; `false` is the instant kill switch |
 | unchanged | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL` |
 
-**Migration (stage 4):** run `01_migration_audit.sql` first. Apply `20261030000000_demo_sessions.sql` **by itself**
-(SQL editor or MCP `apply_migration` named `demo_sessions`); use `supabase db push` only if the recorded history
-equals the 30 repo filenames exactly. Then `02_post_apply_checks.sql` plus a real login, a Home/Library load and
-one throwaway registration from the mobile app. Rollback: `03_rollback_demo_guard.sql` (step 1 alone detaches the
-hook within one PostgREST config reload).
+**Migration (stage 4):** preflight `01_migration_audit.sql`, backup per `00_backup_free_plan.md` (restore proof via
+`06_backup_fingerprint.sql`), then apply `04_apply_option_a.sql` **by itself, in one transaction**. The migration is
+fail-closed: it enables `pg_cron`, schedules `paax_demo_cleanup` and asserts the job is active; if any of that fails
+nothing is applied (verified in staging, see `docs/runbooks/demo-release/AUDIT_2026-11-02.md`). Never
+`supabase db push` (production history uses MCP-assigned versions). Then `02_post_apply_checks.sql` plus a real
+login, a Home/Library load and one throwaway registration from the mobile app. The optional history record is
+deferred until the application method is final. Rollback: `05_emergency_detach_guard.sql` (seconds) or
+`03_rollback_demo_guard.sql` (full; pg_cron stays installed by decision).
 
 **Guard safety review:** the hook returns immediately for any JWT without `app_metadata.paax_demo=true`
 (anon, service role, every real user) using only JSON operations on the claims; claim parsing is wrapped so a

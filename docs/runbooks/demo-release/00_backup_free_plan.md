@@ -17,52 +17,62 @@ written to a private folder on your machine; nothing is pasted into chat or comm
 
 ## 1. Take the dumps (read-only against production; ~35 MB database, a minute or two)
 
+This exact set of commands was exercised end to end against the local stack on 2026-11-03
+(`staging/run_backup_restore_test.sh`): dump → restore into an empty database → fingerprint comparison identical.
+
 ```powershell
-# roles (passwords are not exported by Supabase's dump; role names/grants are)
+# roles (names/memberships/grants; Supabase never exports role passwords)
 npx supabase db dump --db-url $env:PAAX_DB_URL --role-only -f roles.sql
-# schema of every app schema (public, private, storage policies, functions, triggers, RLS, grants)
+# application schemas: public + private (tables, functions, triggers, RLS policies, grants)
 npx supabase db dump --db-url $env:PAAX_DB_URL -f schema.sql
-# data of the app schemas (COPY format, restorable with psql)
+# managed schemas' DDL: auth + storage (needed to rebuild an empty database)
+npx supabase db dump --db-url $env:PAAX_DB_URL --schema auth,storage -f managed_schema.sql
+# ALL data in COPY format — includes auth (users, identities, sessions, refresh tokens), storage metadata, public, private
 npx supabase db dump --db-url $env:PAAX_DB_URL --data-only --use-copy -f data.sql
-# authentication data: users, identities, sessions, refresh tokens (auth schema is excluded by default)
+# redundant per-schema copies of the sensitive data (subsets of data.sql; restore data.sql once, keep these as spares)
 npx supabase db dump --db-url $env:PAAX_DB_URL --data-only --use-copy --schema auth -f auth_data.sql
-# storage object metadata (files themselves live in object storage and are not touched by the migration)
 npx supabase db dump --db-url $env:PAAX_DB_URL --data-only --use-copy --schema storage -f storage_data.sql
 ```
 
-Record the baseline next to the dumps (also in `01_migration_audit.sql` §5): `auth.users` 5, `public.profiles` 5,
-`public.playlists` 30. Then: `Get-ChildItem | Select Name, Length` and keep the listing with the files.
+Then run `06_backup_fingerprint.sql` in the production SQL editor (read-only) and save its full output as
+`fp_production.txt` next to the dumps. `Get-ChildItem | Select Name, Length` and keep the listing with the files.
 
 ## 2. Verify the backup is restorable (local only, production untouched)
 
-Restore into a scratch database inside the local Supabase stack (it has the same Postgres 17 major and the
-Supabase roles, so the dumps apply cleanly):
+Restore into an **empty** scratch database inside the local Supabase stack (same Postgres 17 major, same Supabase
+roles) and compare fingerprints. The exact fingerprint lines (count + md5 over ids / emails / password hashes /
+refresh tokens / object names) and the exact per-table counts must be identical to `fp_production.txt`; matching
+counts alone are not accepted.
 
 ```powershell
 # from the worktree root (where supabase/config.toml lives)
 npx supabase start
-docker exec supabase_db_web-demo-mode psql -U postgres -c "drop database if exists paax_verify;" -c "create database paax_verify;"
-Get-Content schema.sql    | docker exec -i supabase_db_web-demo-mode psql -U postgres -d paax_verify -v ON_ERROR_STOP=1 -q
-Get-Content auth_data.sql | docker exec -i supabase_db_web-demo-mode psql -U postgres -d paax_verify -v ON_ERROR_STOP=1 -q
-Get-Content data.sql      | docker exec -i supabase_db_web-demo-mode psql -U postgres -d paax_verify -v ON_ERROR_STOP=1 -q
-docker exec supabase_db_web-demo-mode psql -U postgres -d paax_verify -At -c "select (select count(*) from auth.users), (select count(*) from public.profiles), (select count(*) from public.playlists);"
+$db = "supabase_db_web-demo-mode"
+docker exec $db psql -U supabase_admin -d postgres -q -c "drop database if exists paax_verify;" -c "create database paax_verify template template0;"
+# platform fixtures the dumps reference (not application data)
+docker exec $db psql -U supabase_admin -d paax_verify -q -c "create schema if not exists extensions; create schema if not exists supabase_functions; create schema if not exists private; create extension if not exists pgcrypto with schema extensions; create extension if not exists ""uuid-ossp"" with schema extensions; create extension if not exists pg_stat_statements with schema extensions; create extension if not exists supabase_vault cascade; create publication supabase_realtime;"
+Get-Content managed_schema.sql | docker exec -i $db psql -U supabase_admin -d paax_verify -q
+Get-Content schema.sql         | docker exec -i $db psql -U supabase_admin -d paax_verify -q
+Get-Content data.sql           | docker exec -i $db psql -U supabase_admin -d paax_verify -q
+Get-Content ..\..\<repo>\docs\runbooks\demo-release\06_backup_fingerprint.sql | docker exec -i $db psql -U supabase_admin -d paax_verify -At -q > fp_restored.txt 2>&1
+Compare-Object (Get-Content fp_production.txt) (Get-Content fp_restored.txt)   # expect NO output
 ```
 
-Expected output: `5|5|30`. If any step stops with an error, the backup is not trustworthy: stop and report before
-applying anything. Afterwards `docker exec supabase_db_web-demo-mode psql -U postgres -c "drop database paax_verify;"`
-and `npx supabase stop`.
-
-Note: the `auth` schema in the scratch database comes from the local stack's own auth migrations (GoTrue
-version may be slightly newer); if `auth_data.sql` reports an unknown column, that is a local/remote GoTrue
-version skew, not a broken dump. In that case verify the dump by content instead:
-`Select-String -Path auth_data.sql -Pattern "COPY auth.users" -Context 0,6`.
+Expected, harmless messages during the schema restore (seen in staging): `can only create extension in database
+postgres` (pg_cron line, scratch db only), `relation "supabase_functions.hooks" does not exist` (platform
+table), and `function private.handle_new_user() / private.tg_on_auth_user_deleted() does not exist` (two
+`auth.users` triggers in `managed_schema.sql` reference functions that `schema.sql` creates afterwards; they only
+matter for new signups in the scratch db, not for verifying data — for a real rebuild, run `managed_schema.sql` a
+second time after `schema.sql` so those two triggers are created). Anything else, or any difference in the fingerprint comparison, means the backup is not trustworthy:
+stop and report before applying anything. Afterwards
+`docker exec $db psql -U supabase_admin -d postgres -c "drop database paax_verify;"` and `npx supabase stop`.
 
 ## 3. Restore procedure (only if a rollback ever needs data, which this migration does not)
 
 The migration adds objects and a role setting; `03_rollback_demo_guard.sql` undoes it without touching data.
 A data restore would only be needed for an unrelated disaster. Procedure: run `03_rollback_demo_guard.sql`,
-then restore with `psql $env:PAAX_DB_URL -v ON_ERROR_STOP=1 -f data.sql` (and `auth_data.sql`) after truncating
-the affected tables — do this only with a second explicit review, never as part of this release.
+then restore the affected tables from `data.sql` (it already contains the auth and storage rows) after truncating
+them — do this only with a second explicit review, never as part of this release.
 
 ## 4. Privacy
 
