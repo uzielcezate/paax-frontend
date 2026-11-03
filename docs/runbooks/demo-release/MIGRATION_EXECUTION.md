@@ -20,7 +20,9 @@ Any mismatch → stop and report; do not continue.
 
 ## Step 2 — Backup: `00_backup_free_plan.md` sections 1–2
 Pass criteria: six dump files exist; `06_backup_fingerprint.sql` output from production and from the local restore
-is identical (exact counts and md5 lines, auth data included). Keep the folder private.
+is identical (exact counts and md5 lines, auth data included); storage object contents exported and verified
+(`windows/Export-Storage.ps1`, MD5 = eTag for every object); folder encrypted at rest (`windows/Protect-Backup.ps1`).
+Done 2026-11-03 — see `AUDIT_2026-11-02.md` addenda. Keep the folder private.
 
 ## Step 3 — Apply (SQL editor, one transaction): `04_apply_option_a.sql`
 - It is the committed migration file verbatim between `begin;` and `commit;`. Paste the whole file, run once.

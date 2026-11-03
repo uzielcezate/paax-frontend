@@ -88,3 +88,30 @@ Backup:
 Blockers (do not apply): any connection or dump error; any fingerprint difference; any unexpected restore error;
 `pg_cron` missing from `shared_preload_libraries` or already installed; a pre-request hook already configured;
 demo objects already present; baseline counts unexplained; `rolsuper` t (unexpected role).
+
+## 5. Storage object contents (not covered by pg_dump)
+
+The PostgreSQL dumps carry only storage METADATA (`storage.objects` rows: path, size, eTag, mimetype) and the 8
+`storage.objects` policies (in `managed_schema.sql`); the file bytes live in Supabase's object store. `Export-Storage.ps1`
+downloads every object listed in `storage_data.sql` into `<backup>\storage\<bucket>\<path>` (paths verbatim) through
+the public endpoint (GET only, no credential, nothing changed on Supabase) and verifies each file: size == metadata
+size and MD5 == eTag (single-part uploads). Result goes to `storage_manifest.csv`; any MISMATCH/DOWNLOAD_FAILED is
+`RESULT: FAIL`. Objects in a private bucket are reported as SKIPPED_PRIVATE (none exist: all 177 objects are in the
+public `music-images` bucket; `user-avatars` and `story-media` are empty).
+
+## 6. Encryption at rest
+
+Windows 11 Home has no EFS and BitLocker status cannot be read without admin rights, so the backup is encrypted
+explicitly with `Protect-Backup.ps1`: the folder is zipped, encrypted with AES-256-CBC + HMAC-SHA256
+(encrypt-then-MAC, built-in .NET only), decrypted again and compared by SHA256 (round-trip proof), and only then
+the zip and (with `-RemovePlaintext`) the plaintext folder are deleted. Result: `<folder>.paaxbak` + `.sha256` of the
+inner zip. Key modes:
+- `dpapi` (default, non-interactive): random 64-byte master key stored DPAPI-protected for this Windows user in
+  `C:\Users\uziel\PaaxSecrets\backup_key.dpapi`. Decryptable only by this account on this machine.
+- `passphrase`: PBKDF2-SHA256 (300k iterations, random salt) from a typed SecureString; portable across machines.
+  Recommended as a second copy if the backup must survive a Windows reinstall: run
+  `Protect-Backup.ps1 -KeyMode passphrase` on a decrypted copy.
+`Unprotect-Backup.ps1 -EncryptedFile <file.paaxbak>` verifies the HMAC (a flipped byte is rejected, nothing written)
+and restores the zip; `Expand-Archive` then gives the folder back for `Verify-Restore.ps1 -BackupDir`.
+`PaaxSecrets` holds the DB URI and the master key (both DPAPI, folder ACL = this user only): delete it after the
+release is stable, together with the `.paaxbak` once a newer backup exists.
