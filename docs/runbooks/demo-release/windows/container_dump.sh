@@ -26,6 +26,12 @@ case "${1:-}" in
   data)           pg_dump "$U" --data-only -n public -n private -n auth -n storage > /tmp/paax/out/data.sql 2> /tmp/paax/out/err.txt ;;
   auth_data)      pg_dump "$U" --data-only -n auth > /tmp/paax/out/auth_data.sql 2> /tmp/paax/out/err.txt ;;
   storage_data)   pg_dump "$U" --data-only -n storage > /tmp/paax/out/storage_data.sql 2> /tmp/paax/out/err.txt ;;
+  # ---- release-stage operations (WRITE to the target; only via Apply-Migration.ps1 / Run-ProdSql.ps1) ----
+  apply)          psql "$U" --echo-errors -v ON_ERROR_STOP=1 -f /tmp/paax/04.sql > /tmp/paax/out/apply_output.txt 2>&1 ;;        # file holds begin;...commit; any error -> psql exits, connection closes, transaction rolls back
+  postcheck)      psql "$U" --echo-queries -v ON_ERROR_STOP=0 -f /tmp/paax/02.sql > /tmp/paax/out/postcheck_output.txt 2>&1 ;;
+  rollback)       psql "$U" --echo-queries -v ON_ERROR_STOP=0 -f /tmp/paax/03.sql > /tmp/paax/out/rollback_output.txt 2>&1 ;;
+  detach)         psql "$U" --echo-queries -v ON_ERROR_STOP=0 -f /tmp/paax/05.sql > /tmp/paax/out/detach_output.txt 2>&1 ;;
+  cronruns)       psql "$U" -At -c "select status, return_message, start_time from cron.job_run_details where jobid = (select jobid from cron.job where jobname = 'paax_demo_cleanup') order by start_time desc limit 3;" > /tmp/paax/out/cronruns_output.txt 2>&1 ;;
   *) echo "unknown kind: ${1:-}" >&2; exit 92 ;;
 esac
 rc=$?

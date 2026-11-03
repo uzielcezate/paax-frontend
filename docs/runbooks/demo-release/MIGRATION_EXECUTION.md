@@ -24,7 +24,12 @@ is identical (exact counts and md5 lines, auth data included); storage object co
 (`windows/Export-Storage.ps1`, MD5 = eTag for every object); folder encrypted at rest (`windows/Protect-Backup.ps1`).
 Done 2026-11-03 — see `AUDIT_2026-11-02.md` addenda. Keep the folder private.
 
-## Step 3 — Apply (SQL editor, one transaction): `04_apply_option_a.sql`
+## Step 3 — Apply (one transaction): `04_apply_option_a.sql`
+- **Selected application method (Windows):** `windows/Run-ProdSql.ps1 -Kind apply -Confirm 'APPLY-DEMO-MIGRATION'`
+  — psql inside the isolated container over the session pooler as role `postgres`, URI over stdin, output saved
+  (scrubbed) under `PaaxBackups\release-log\`. `ON_ERROR_STOP=1`: any error ends psql before `commit;` and the
+  connection close rolls everything back. Rehearsed end to end on an exact production clone (see
+  `AUDIT_2026-11-02.md` → "full rehearsal"). The SQL-editor paste remains the manual fallback.
 - It is the committed migration file verbatim between `begin;` and `commit;`. Paste the whole file, run once.
 - **Fail-closed.** The migration no longer tolerates a missing sweeper: `create extension pg_cron` is a plain
   statement (no exception swallowing), the job is scheduled, and an explicit assertion re-reads `cron.job` and
