@@ -8,7 +8,10 @@ objects and one role setting, and the pre-request hook is a no-op for every non-
 - Option A confirmed: `pg_cron` will be enabled by the migration (`create extension if not exists pg_cron with schema pg_catalog`).
 - No other production change is in flight (no Railway deploy, no Pages deploy) during steps 1–4.
 
-## Step 1 — Preflight (read-only, SQL editor): `01_migration_audit.sql` sections C–F
+> Windows: Steps 1–2 are automated by `windows/Backup-Production.ps1` + `windows/Verify-Restore.ps1`
+> (see `windows/README.md`, which also states the PASS/FAIL criteria for authorizing Step 3).
+
+## Step 1 — Preflight (read-only, SQL editor or psql): `01_migration_audit.sql` sections C–F
 Pass criteria: `private` schema present; `auth.users.raw_app_meta_data` is jsonb; the 5 `profiles` columns exist;
 a signup trigger exists on `auth.users`; no user-data table without RLS; `authenticator.rolconfig` has no
 `pgrst.db_pre_request`; `pg_available_extensions` lists `pg_cron` with `installed_version` null;

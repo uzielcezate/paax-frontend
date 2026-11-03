@@ -4,6 +4,11 @@ Free projects have no PITR and no downloadable Dashboard backups, so the backup 
 yourself** with the Supabase CLI (it runs `pg_dump` in Docker, so Docker Desktop must be running). Everything is
 written to a private folder on your machine; nothing is pasted into chat or committed.
 
+> **Windows 11 (automated):** `windows/README.md` wraps sections 1–2 (plus the preflight and the fingerprint) in
+> three PowerShell scripts — `Save-PaaxDbUrl.ps1` (DPAPI-encrypted credential, run by you), `Backup-Production.ps1`
+> (read-only dumps + fingerprint + preflight) and `Verify-Restore.ps1` (restore proof in one isolated container,
+> PASS/FAIL). Dry-run verified 2026-11-03. The manual commands below remain the reference.
+
 ## 0. Prerequisites (you)
 
 - Docker Desktop running; `npx supabase --version` works (used throughout this project).
