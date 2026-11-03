@@ -264,6 +264,43 @@ From `http://127.0.0.1:8087` most label-owned videos (Sony/UMG catalog, e.g. `FW
 
 ---
 
+## Production release checklist (2026-11-02)
+
+Runbook files: `docs/runbooks/demo-release/` (`README.md` stage table, `01_migration_audit.sql`,
+`02_post_apply_checks.sql`, `03_rollback_demo_guard.sql`, PR texts). Every stage needs an explicit go;
+after each stage, verification is reported before the next one starts.
+
+**Preserved and verified before release:** `feat/ui-sculpted-pills` `0cab89c` is the UI baseline; the demo
+branch contains it unchanged; the only playback-related differences are the three approved files; auth
+controllers, auth screens, the mobile engine, the matching services and the backend playback services are
+byte-identical to the baseline.
+
+**Railway `paax-api` variables (stage 3, before the deploy; `DEMO_ENABLED` stays unset until stage 7):**
+
+| Variable | Value |
+|---|---|
+| `SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_ZqEzyHbIGvHVCGvoSRU6kw_2QKU8dom` (public) |
+| `FRONTEND_ORIGINS` | `https://paaxmusic.app,https://www.paaxmusic.app,https://demo.paaxmusic.app,https://uzielsandoval.com,https://www.uzielsandoval.com` (replaces `*`) |
+| `DEMO_WEB_URL` | `https://demo.paaxmusic.app/?demo=1` |
+| `FRONTEND_ORIGIN_REGEX` | only while testing Pages previews, e.g. `https://[a-z0-9-]+\.<project>\.pages\.dev`; remove afterwards |
+| `DEMO_ENABLED` | **unset / `false`** at stage 3; `true` only at stage 7; `false` is the instant kill switch |
+| unchanged | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `REDIS_URL` |
+
+**Migration (stage 4):** run `01_migration_audit.sql` first. Apply `20261030000000_demo_sessions.sql` **by itself**
+(SQL editor or MCP `apply_migration` named `demo_sessions`); use `supabase db push` only if the recorded history
+equals the 30 repo filenames exactly. Then `02_post_apply_checks.sql` plus a real login, a Home/Library load and
+one throwaway registration from the mobile app. Rollback: `03_rollback_demo_guard.sql` (step 1 alone detaches the
+hook within one PostgREST config reload).
+
+**Guard safety review:** the hook returns immediately for any JWT without `app_metadata.paax_demo=true`
+(anon, service role, every real user) using only JSON operations on the claims; claim parsing is wrapped so a
+malformed value cannot raise; the only raises are the intentional PT401/PT403 for demo identities. Cost for
+real traffic: one `current_setting` + a few jsonb lookups per request.
+
+**Rate limiter behind the real proxies:** `CF-Connecting-IP` first, else the rightmost `X-Forwarded-For` hop,
+else the socket peer (first-hop trust removed; tests cover a spoofed first hop). Redis-backed; degrades open if
+Redis is down.
+
 ## Known limitations
 
 - Demo identities see the same Home a brand-new real user sees (Trending / Recently added + whatever they follow during the session). No follows are seeded: fake taste would be indistinguishable from real recommendation logic.
