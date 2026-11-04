@@ -1,6 +1,6 @@
 # Demo migration — final backup and execution instructions (Option A: pg_cron)
 
-Status: prepared, **not executed**. Every step below waits for the explicit go. Expected wall time: 20–30 minutes.
+Status: Steps 1-4 **executed in production on 2026-11-03** (see `AUDIT_2026-11-02.md` -> "PRODUCTION EXECUTION"). Step 5 (history record) remains deferred. Later stages wait for the explicit go.
 Nothing here touches the mobile app, authentication flows, the UI or the playback engine; the migration adds
 objects and one role setting, and the pre-request hook is a no-op for every non-demo JWT.
 

@@ -1,6 +1,7 @@
 ﻿# Run-ProdSql.ps1 - runs ONE runbook SQL file against the database named by the DPAPI secret, through psql inside the
 # isolated container (URI over stdin only). Output is saved (URI scrubbed) under <BackupRoot>\release-log\ and printed.
 #
+#   -Kind preflight  01_migration_audit.sql  read-only (re-check before apply)
 #   -Kind apply      04_apply_option_a.sql   WRITES (one transaction, fail-closed). Requires -Confirm 'APPLY-DEMO-MIGRATION'.
 #   -Kind postcheck  02_post_apply_checks.sql  read-only
 #   -Kind cronruns   last 3 cron.job_run_details rows for paax_demo_cleanup   read-only
@@ -9,7 +10,7 @@
 #
 #   powershell -ExecutionPolicy Bypass -File ".\docs\runbooks\demo-release\windows\Run-ProdSql.ps1" -Kind postcheck
 param(
-  [Parameter(Mandatory = $true)][ValidateSet('apply', 'postcheck', 'cronruns', 'rollback', 'detach')][string]$Kind,
+  [Parameter(Mandatory = $true)][ValidateSet('preflight', 'apply', 'postcheck', 'cronruns', 'rollback', 'detach')][string]$Kind,
   [string]$Confirm    = "",
   [string]$SecretFile = "C:\Users\uziel\PaaxSecrets\paax_db_url.dpapi",
   [string]$BackupRoot = "C:\Users\uziel\PaaxBackups",
@@ -21,7 +22,7 @@ $ErrorActionPreference = 'Stop'
 if (-not $RunbookDir) { $RunbookDir = Split-Path -Parent $PSScriptRoot }
 $required = @{ apply = 'APPLY-DEMO-MIGRATION'; rollback = 'ROLLBACK-DEMO'; detach = 'DETACH-GUARD' }
 if ($required.ContainsKey($Kind) -and $Confirm -ne $required[$Kind]) { throw "Kind '$Kind' writes to the target database; re-run with -Confirm '$($required[$Kind])' only after explicit authorization." }
-$files = @{ apply = '04_apply_option_a.sql'; postcheck = '02_post_apply_checks.sql'; rollback = '03_rollback_demo_guard.sql'; detach = '05_emergency_detach_guard.sql' }
+$files = @{ preflight = '01_migration_audit.sql'; apply = '04_apply_option_a.sql'; postcheck = '02_post_apply_checks.sql'; rollback = '03_rollback_demo_guard.sql'; detach = '05_emergency_detach_guard.sql' }
 
 function Load-DbUrl {
   if (-not (Test-Path $SecretFile)) { throw "Secret file not found: $SecretFile" }
@@ -60,7 +61,7 @@ $ErrorActionPreference = 'Continue'
 $res  = $url | docker exec -i $Container sh /tmp/paax/dump.sh $Kind 2>&1
 $code = $LASTEXITCODE
 $ErrorActionPreference = 'Stop'
-$outFile = "${Kind}_output.txt"
+$outFile = if ($Kind -eq 'preflight') { 'preflight_production.txt' } else { "${Kind}_output.txt" }
 $body = docker exec $Container sh -c "cat /tmp/paax/out/$outFile 2>/dev/null" | ForEach-Object { "$_" }
 docker exec $Container sh -c "rm -rf /tmp/paax" | Out-Null
 $text = Scrub ((@($res | ForEach-Object { "$_" }) + @('--- output ---') + @($body)) -join "`n") $url
