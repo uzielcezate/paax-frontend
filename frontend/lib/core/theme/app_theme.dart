@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart'; // ignore: unnecessary_import -- required since Flutter 3.44 (CupertinoPageTransitionsBuilder moved to cupertino)
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
