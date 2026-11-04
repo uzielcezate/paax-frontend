@@ -1,0 +1,20 @@
+# Cloudflare Pages headers for the PAAX web build (demo.paaxmusic.app).
+# Copied verbatim into build/web/ by `flutter build web`.
+#
+# The app is embedded in an <iframe> on the portfolio, so framing is allowed
+# ONLY from the portfolio origins (and itself). Everything else is denied.
+/*
+  Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: autoplay=(self "https://www.youtube.com" "https://www.youtube-nocookie.com"), encrypted-media=(self "https://www.youtube.com")
+
+# Never cache the shell or the service worker so a new deploy is picked up.
+/index.html
+  Cache-Control: no-cache
+/flutter_service_worker.js
+  Cache-Control: no-cache
+/custom_service_worker.js
+  Cache-Control: no-cache
+/version.json
+  Cache-Control: no-cache

@@ -25,6 +25,13 @@ import 'presentation/state/playback_controller.dart';
 import 'presentation/state/search_controller.dart' as app_search;
 import 'presentation/state/theme_state.dart';
 import 'presentation/screens/auth/auth_gate.dart';
+// Portfolio demo mode (web only, opt-in via ?demo=1). Additive: normal mode is
+// the default on every platform and none of the providers above change.
+import 'core/demo/demo_mode.dart';
+import 'data/remote/demo_session_api.dart';
+import 'data/remote/supabase_demo_session_adapter.dart';
+import 'presentation/state/demo_session_controller.dart';
+import 'presentation/screens/demo/demo_gate.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:audio_service/audio_service.dart';
@@ -214,6 +221,20 @@ class PaaxApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => app_search.SearchController()),
         ChangeNotifierProvider(create: (_) => PlaybackController()),
+        // Demo session lifecycle. Lazy: only ever instantiated when DemoGate is
+        // mounted (web + ?demo=1); in normal mode this provider is inert.
+        ChangeNotifierProvider(
+          create: (ctx) => DemoSessionController(
+            api: DemoSessionApi(),
+            adapter: SupabaseDemoSessionAdapter(),
+            pausePlayback: () async {
+              // Pause AND clear the in-memory queue: a restarted demo must not
+              // inherit the previous run's mini-player track.
+              await ctx.read<PlaybackController>().resetForDemoEnd();
+            },
+            clearLocalState: HiveStorage.clearAll,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => ThemeState()),
         // Phase 3.4.1.2C: single source of truth for (future) live Party
         // session state. No runtime yet → hasActiveParty is always false, so
@@ -302,7 +323,7 @@ class PaaxApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         scrollBehavior: const PaaxScrollBehavior(),
-        home: const AuthGate(),
+        home: DemoMode.isRequested ? const DemoGate() : const AuthGate(),
       ),
     );
   }

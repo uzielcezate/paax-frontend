@@ -150,7 +150,7 @@ sequenceDiagram
   3. **Delegate transport controls back to `PlaybackController`** — a notification "next" tap calls into the controller, which drives the IFrame engine.
 
   On top of the service, the mobile engine runs WebView-level survival tricks so the IFrame keeps decoding when backgrounded: a **silent Web Audio oscillator**, a **~5s heartbeat**, and a **`visibilitychange` resume** handler.
-- **OS Media Controls**: Yes on Android — play/pause/next/prev in the notification and on the lock screen, wired through `MediaButtonReceiver` and the declared `com.ryanheise.audioservice.AudioService`. Manifest permissions: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK`. See [Android config in architecture](../architecture.md). The web build's media session hooks (`media_session_web.dart`) are currently commented out.
+- **OS Media Controls**: Yes on Android — play/pause/next/prev in the notification and on the lock screen, wired through `MediaButtonReceiver` and the declared `com.ryanheise.audioservice.AudioService`. Manifest permissions: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, `WAKE_LOCK`. See [Android config in architecture](../architecture.md). **Web: intentionally no custom media session** (owner decision, 2026-11-03). `media_session_web.dart` defines the four hooks as permanent no-ops so Flutter Web compiles; the browser keeps the YouTube IFrame's own metadata (e.g. "Skrillex - Topic"). Do not re-enable the old `dart:js` Media Session bridge or set `navigator.mediaSession.metadata` on web. Mobile (`media_session_stub.dart` → `PaaxAudioHandler`) is unaffected.
 
 See [notifications](notifications.md) for the media-notification detail (and why push notifications are a separate, unimplemented concern).
 

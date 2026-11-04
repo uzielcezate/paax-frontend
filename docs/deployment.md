@@ -98,6 +98,31 @@ flutter build web --dart-define=ENV=prod
 ```
 The web build doubles as the **TWA** wrapped Android app: `.well-known/assetlinks.json` (digital asset links, SHA-256 cert fingerprint) + an offline-first service worker enable Trusted Web Activity cold-start. Keep `assetlinks.json` in sync with the signing certificate.
 
+### Portfolio demo web build — Cloudflare Pages (`demo.paaxmusic.app`, prepared 2026-10-30, not yet deployed)
+
+Target architecture: portfolio `uzielsandoval.com` (Vercel) embeds `https://demo.paaxmusic.app/?demo=1` (Cloudflare Pages) → `api.paaxmusic.app` (Railway) → Supabase. See [features/demo-mode.md](features/demo-mode.md).
+
+```bash
+cd frontend
+flutter build web --release \
+  --dart-define=ENV=prod \
+  --dart-define=API_BASE_URL=https://api.paaxmusic.app
+# Output: build/web/  (includes web/_headers and web/_redirects verbatim)
+```
+
+- `web/_headers` sets `Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com` (the ONLY origins allowed to frame the app), `Permissions-Policy` autoplay for YouTube, and `no-cache` for `index.html` + service workers. Edit the `frame-ancestors` list if the portfolio origin changes.
+- `web/_redirects` is the SPA fallback (`/demo` and deep links serve `index.html`).
+- **Create the Pages project** (dashboard → Workers & Pages → Create → Pages → *Direct Upload*, or `npx wrangler pages project create paax-demo`), then publish a **preview** first:
+  ```bash
+  npx wrangler pages deploy build/web --project-name paax-demo --branch preview
+  # → https://preview.paax-demo.pages.dev  (temporary preview domain for verification)
+  ```
+  Verify on the preview URL: the app boots, `?demo=1` starts a session, playback works inside an `<iframe>` served from an allowed origin, and `curl -I` shows the CSP header.
+- **Production** (after approval): `npx wrangler pages deploy build/web --project-name paax-demo --branch main`, then add the custom domain `demo.paaxmusic.app` in Pages → Custom domains (Cloudflare creates the CNAME automatically because the zone is on Cloudflare). This does **not** touch the apex `paaxmusic.app` record.
+- **paax-api CORS**: replace the wildcard with `FRONTEND_ORIGINS=https://paaxmusic.app,https://www.paaxmusic.app,https://demo.paaxmusic.app,https://uzielsandoval.com,https://www.uzielsandoval.com`. While testing a Pages preview add `FRONTEND_ORIGIN_REGEX=https://[a-z0-9-]+\.<pages-project>\.pages\.dev` and remove it once the custom domain is live. Mobile apps are unaffected (no `Origin` header).
+- **Supabase Auth**: add `https://demo.paaxmusic.app` to Authentication → URL Configuration → Redirect URLs only if password-recovery links should ever land on the web build; the demo itself never sends e-mail.
+- **Browser session behaviour inside the iframe**: the Supabase session is persisted in the iframe origin's `localStorage`. Chrome/Firefox partition third-party storage per top-level site, so a visitor's demo session survives closing/reopening the portfolio modal (same remaining time) but is not shared with a direct visit to `demo.paaxmusic.app`. Safari with "Prevent cross-site tracking" may block third-party storage entirely; the app then still works but a reload inside the iframe mints a new session.
+
 ### Android (native APK/AAB)
 
 ```bash
