@@ -39,7 +39,7 @@ Start Demo (portfolio) → iframe https://paaxmusic.app/?demo=1
 | Flutter | `presentation/state/demo_session_controller.dart` | `DemoSessionController`: idle → starting → active → ending → ended / error; server-seeded countdown; 60 s server re-validation; pause playback + clear local state on end; `postMessage` lifecycle events. |
 | Flutter | `presentation/screens/demo/demo_gate.dart`, `demo_screens.dart` | `DemoGate` wraps the existing `AuthGate`; Starting / Ended ("Restart Demo") / Error screens. |
 | Flutter | `main.dart` | Two additive lines: a lazy `DemoSessionController` provider and `home: DemoMode.isRequested ? DemoGate : AuthGate`. |
-| Flutter | `core/playback/media_session_web.dart` | **Web compile fix** (unrelated to demo but required for any web build): the file was entirely commented out, so `flutter build web` failed with three undefined-method errors. Now defines the four media-session functions as documented no-ops with the mobile signatures. Mobile uses `media_session_stub.dart` and is untouched. |
+| Flutter | `core/playback/media_session_web.dart` | **Web compile fix** (unrelated to demo but required for any web build): the file was entirely commented out, so `flutter build web` failed with three undefined-method errors. Now defines the four media-session functions as documented no-ops with the mobile signatures. Mobile uses `media_session_stub.dart` and is untouched. **Intended final behaviour (owner, 2026-11-03): web keeps YouTube's own browser media metadata; do not re-enable the old JS bridge.** |
 
 ---
 

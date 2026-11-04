@@ -230,7 +230,7 @@ Confirmed non-live code. If asked to touch any of it, first decide whether the c
 | Item | Location | Status |
 |------|----------|--------|
 | `deezer_api_client.dart` | `frontend/lib/data/api/` | **Fully commented out** (dead) |
-| `media_session_web.dart` | `frontend/lib/core/playback/` | **Was fully commented out until 2026-10-30**, which made `flutter build web` fail (undefined `setMediaSession` etc.). Now four documented no-ops; the IFrame owns browser media controls |
+| `media_session_web.dart` | `frontend/lib/core/playback/` | **Was fully commented out until 2026-10-30**, which made `flutter build web` fail (undefined `setMediaSession` etc.). Now four documented no-ops; the IFrame owns browser media controls. **Final by owner decision (2026-11-03): web must not override YouTube's media metadata — never re-enable the JS bridge or set `navigator.mediaSession.metadata` on web; mobile media session is untouched** |
 | `getStreamUrl` / `/stream/{videoId}` | data source + repo | Defined, **unused** by playback |
 | `ApiConfig.streamBaseUrl` | `core/config/api_config.dart` | Referenced only within the config file |
 | `paax-stream` `resolve/`, `resolver/`, `providers/`, `services/` | `paax-stream/` | **Orphaned**, not mounted; can't import (`yt_dlp` missing) |
