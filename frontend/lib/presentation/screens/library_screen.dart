@@ -18,6 +18,8 @@ import '../../domain/entities/single_track_album_detail.dart';
 import '../../domain/entities/saved_album.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/track_list_tile.dart';
+import '../widgets/paax_pill.dart';
+import 'main_wrapper.dart' show kMiniPlayerZone;
 import '../widgets/bottom_content_padding.dart';
 import 'playlist_detail_screen.dart';
 import '../widgets/library_headers.dart';
@@ -174,53 +176,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ),
           ),
 
-          // ── Bottom fade gradient (below header/controls) ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: Container(
-                height: context.read<PlaybackController>().currentTrack != null ? 240 : 160,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.96),
-                      AppColors.background.withValues(alpha: 0.65),
-                      AppColors.background.withValues(alpha: 0.25),
-                      AppColors.background.withValues(alpha: 0.0),
-                    ],
-                    stops: const [0.0, 0.35, 0.65, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // (V4 §1) The bottom fade is painted once by the MainWrapper dock;
+          // no per-screen bottom gradient here, so nothing stacks.
 
-          // ── Floating header: title + chips + sort/search + fade tail ──
+          // ── Floating header: title + chips + sort/search over ONE
+          // atmospheric fade (V3 §5). No opaque rectangle; the fade plateaus
+          // behind the search row and dissolves into the lists with scroll.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
+                ValueListenableBuilder<double>(
+                  valueListenable: _headerHeight,
+                  builder: (_, measured, __) {
+                    final safeTop = MediaQuery.of(context).padding.top;
+                    final headerBottom = measured > 0
+                        ? measured
+                        : safeTop + LibraryLayout.headerFallback;
+                    return ValueListenableBuilder<double>(
+                      valueListenable: _scrollOffset,
+                      builder: (_, offset, __) => PaaxHeaderFade(
+                        plateau: headerBottom - LibraryLayout.fadePlateauLift,
+                        opacity: (offset / 40.0).clamp(0.0, 1.0),
+                      ),
+                    );
+                  },
+                ),
                 Container(
                   key: _headerKey,
-                  color: AppColors.background,
                   child: SafeArea(
                     bottom: false,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // Title
-                        const Padding(
-                          padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-                          child: Text("Your Library",
+                        // Title — aligned to the shared floating inset
+                        Padding(
+                          padding: EdgeInsets.fromLTRB(
+                              PaaxLayout.floatingInset(context), 8,
+                              PaaxLayout.floatingInset(context), 4),
+                          child: const Text("Your Library",
                             style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w800),
                           ),
                         ),
@@ -240,31 +237,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     ),
                   ),
                 ),
-                // Scroll-triggered fade tail below controls
-                ValueListenableBuilder<double>(
-                  valueListenable: _scrollOffset,
-                  builder: (_, offset, __) {
-                    final fadeOpacity = (offset / 8.0).clamp(0.0, 1.0);
-                    return IgnorePointer(
-                      child: Opacity(
-                        opacity: fadeOpacity,
-                        child: Container(
-                          height: 45,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppColors.background,
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
               ],
             ),
           ),
@@ -275,7 +247,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
               builder: (context) {
                 final hasMiniPlayer = context.watch<PlaybackController>().currentTrack != null;
                 final safePadding = MediaQuery.of(context).padding.bottom;
-                final fabBottom = safePadding + 63 + 8 + (hasMiniPlayer ? 71 : 0);
+                final fabBottom = safePadding + PaaxLayout.dockBottomClearance + PaaxLayout.navHeight + 8 + (hasMiniPlayer ? kMiniPlayerZone : 0);
                 return Positioned(
                   right: 16,
                   bottom: fabBottom.toDouble(),
@@ -456,9 +428,10 @@ class _PlaylistsTabState extends State<_PlaylistsTab> with AutomaticKeepAliveCli
             final pl = displayed[index];
             final isPinned = library.isPlaylistPinned(pl.id);
             return ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              contentPadding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context), vertical: 8),
               leading: SizedBox(
-                width: 56, 
+                width: 56,
+ 
                 height: 56,
                 child: PlaylistCover(playlist: pl, size: 56),
               ),
@@ -650,7 +623,8 @@ class _SavedAlbumsTabState extends State<_SavedAlbumsTab> with AutomaticKeepAliv
       : GridView.builder(
           key: const PageStorageKey("AlbumsGrid"),
           padding: EdgeInsets.fromLTRB(
-            16, _libraryListTop(context, widget.headerHeight.value), 16, BottomContentPadding.bottomHeight(context),
+            PaaxLayout.contentHorizontalInset(context), _libraryListTop(context, widget.headerHeight.value),
+            PaaxLayout.contentHorizontalInset(context), BottomContentPadding.bottomHeight(context),
           ),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
              crossAxisCount: 2,
@@ -723,7 +697,8 @@ class _FollowedArtistsTabState extends State<_FollowedArtistsTab> with Automatic
      : GridView.builder(
         key: const PageStorageKey("ArtistsGrid"),
         padding: EdgeInsets.fromLTRB(
-           16, _libraryListTop(context, widget.headerHeight.value), 16, BottomContentPadding.bottomHeight(context),
+            PaaxLayout.contentHorizontalInset(context), _libraryListTop(context, widget.headerHeight.value),
+            PaaxLayout.contentHorizontalInset(context), BottomContentPadding.bottomHeight(context),
         ),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
            crossAxisCount: 3,

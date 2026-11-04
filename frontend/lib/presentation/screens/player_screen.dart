@@ -1,11 +1,14 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show OverflowBoxFit;
 import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../state/playback_controller.dart';
 import '../state/library_controller.dart';
 import '../widgets/marquee_text.dart';
 import '../widgets/player_layout_metrics.dart';
+import '../widgets/player_vertical_frame.dart';
 
 import '../widgets/overflow_menu.dart';
 import '../widgets/app_image.dart';
@@ -121,19 +124,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
           final bottomInset = [viewPad.bottom, MediaQuery.of(context).padding.bottom, 8.0]
               .reduce((a, b) => a > b ? a : b);
 
-          // ── Artwork sizing ──
-          // Everything below the artwork is budgeted by PlayerControlMetrics
-          // (controls scale with width, so the reserve does too).
+          
+          // ── Vertical budget ──
+          // PlayerControlMetrics owns every fixed height below the header;
+          // the artwork takes what is left and any remaining slack is split
+          // between the artwork→title gap and the bottom edge, which lifts
+          // the whole lower section instead of pinning it to the bottom.
           final contentWidth = screenWidth - 2 * kPlayerHorizontalPadding;
-          final controlsReserved =
-              PlayerControlMetrics.forWidth(contentWidth).reservedHeight;
-          const maxArtworkWidth = 440.0;
-          final availableHeight = screenHeight - topInset - bottomInset - controlsReserved;
-          final maxByHeight = availableHeight * 0.85;
-          double artworkSize = contentWidth.clamp(240.0, maxArtworkWidth);
-          if (maxByHeight > 200) {
-            artworkSize = artworkSize.clamp(240.0, maxByHeight);
-          }
+          final metrics = PlayerControlMetrics.forWidth(contentWidth);
+          final layout = metrics.verticalLayout(
+            safeHeight: screenHeight - topInset - bottomInset,
+            contentWidth: contentWidth,
+          );
 
           final playback = context.read<PlaybackController>();
 
@@ -179,70 +181,64 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: kPlayerHorizontalPadding),
-                    child: Column(
-                      children: [
-                        // ── Header with mode switcher ──
-                        SizedBox(
-                          height: 52,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              // Pill — perfectly centered via Stack
-                              _buildModeSwitcher(),
-                              // Left: close button
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: IconButton(
-                                    onPressed: () => MainWrapper.shellKey.currentState?.closePlayer(),
-                                    icon: const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 32)
+                    // The frame owns the vertical rhythm: one shared slot for
+                    // artwork / compact lyrics, so switching modes never moves
+                    // the info, progress or controls (see PlayerVerticalFrame).
+                    child: PlayerVerticalFrame(
+                      metrics: metrics,
+                      layout: layout,
+                      lyricsExpanded: _lyricsExpanded,
+                      // ── Header with mode switcher ──
+                      header: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Pill — perfectly centered via Stack
+                          _buildModeSwitcher(),
+                          // Left: close button
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                                onPressed: () => MainWrapper.shellKey.currentState?.closePlayer(),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(
+                                  minWidth: PlayerControlMetrics.minTouchTarget,
+                                  minHeight: PlayerControlMetrics.minTouchTarget,
                                 ),
-                              ),
-                              // Right: overflow menu
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: OverflowMenu(
-                                  type: MenuType.track, 
-                                  track: track,
-                                  onNavigation: () => MainWrapper.shellKey.currentState?.closePlayer(), 
-                                  isNowPlaying: true,
-                                ),
-                              ),
-                            ],
+                                icon: const Icon(Icons.keyboard_arrow_down,
+                                    color: Colors.white,
+                                    size: PlayerControlMetrics.headerChevronIcon)
+                            ),
                           ),
-                        ),
-                        
-                        const SizedBox(height: PlayerControlMetrics.headerGap),
-
-                        // ── Content area: Song mode or Lyrics mode ──
-                        Expanded(
-                          child: _mode == PlayerMode.song
-                            ? _buildSongContent(context, track, playback, artworkSize)
-                            : _buildLyricsContent(context, track, playback),
-                        ),
-                        
-                        // ── Track Info ──
-                        _buildTrackInfo(track),
-                        
-                        SizedBox(
-                            height: _lyricsExpanded
-                                ? 10
-                                : PlayerControlMetrics.infoToProgressGap),
-
-                        // ── Progress Bar ──
-                        const SmoothAudioProgressBar(),
-
-                        // ── Controls + Lower — hidden when lyrics expanded ──
-                        if (!_lyricsExpanded) ...[
-                          const SizedBox(
-                              height: PlayerControlMetrics.progressToControlsGap),
-                          const _PlayerControls(),
-                          const SizedBox(
-                              height: PlayerControlMetrics.controlsToLowerGap),
-                          const _LowerActions(),
-                          const SizedBox(height: PlayerControlMetrics.bottomGap),
-                        ] else
-                          const SizedBox(height: 8),
-                      ],
+                          // Right: overflow menu
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OverflowMenu(
+                              type: MenuType.track,
+                              track: track,
+                              onNavigation: () => MainWrapper.shellKey.currentState?.closePlayer(),
+                              isNowPlaying: true,
+                              iconSize: PlayerControlMetrics.headerMenuIcon,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // ── Shared slot: artwork or compact lyrics ──
+                      slot: _mode == PlayerMode.song
+                          ? _buildSongContent(context, track, playback, layout)
+                          : _buildLyricsContent(context, track, playback),
+                      // ── Track Info ──
+                      info: _buildTrackInfo(track),
+                      // ── Progress Bar ──
+                      progress: const SmoothAudioProgressBar(),
+                      // ── Controls (may use part of the gutter) ──
+                      controls: const OverflowBox(
+                        alignment: Alignment.center,
+                        minWidth: 0,
+                        maxWidth: double.infinity,
+                        fit: OverflowBoxFit.deferToChild,
+                        child: _PlayerControls(),
+                      ),
+                      lower: const _LowerActions(),
                     ),
                   ),
                 ),
@@ -311,9 +307,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  // ── Song Mode Content (artwork + spacers) ──
-  Widget _buildSongContent(BuildContext context, Track track, PlaybackController playback, double artworkSize) {
+  
+  // ── Song Mode Content (artwork near the header, slack below) ──
+  Widget _buildSongContent(BuildContext context, Track track,
+      PlaybackController playback, PlayerVerticalLayout layout) {
     return GestureDetector(
+
       onHorizontalDragEnd: (details) {
         final velocity = details.primaryVelocity ?? 0;
         if (velocity < -300) {
@@ -322,13 +321,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
           playback.playPrevious();
         }
       },
-      child: Column(
+      
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final gap = PlayerControlMetrics.artworkToInfoGap +
+              layout.artworkToInfoExtra;
+          // The budget is an estimate (fonts scale); if the region is
+          // smaller than expected the artwork shrinks instead of pushing the
+          // title block out of the column.
+          final artworkSize = constraints.maxHeight.isFinite
+              ? math.min(layout.artworkSize,
+                  math.max(0.0, constraints.maxHeight - gap))
+              : layout.artworkSize;
+          return Column(
         children: [
-          const Spacer(flex: 1),
           SizedBox(
             width: artworkSize,
             height: artworkSize,
             child: Stack(
+
               alignment: Alignment.center,
               children: [
                 Container(
@@ -370,16 +381,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                             ),
                           ),
                         )
+                      
                       : const SizedBox.shrink(),
                 ),
               ],
             ),
           ),
-          const Spacer(flex: 2),
+          const Spacer(),
+          SizedBox(height: gap),
         ],
+          );
+        },
       ),
     );
   }
+
 
   // ── Lyrics Mode Content ──
   Widget _buildLyricsContent(BuildContext context, Track track, PlaybackController playback) {
@@ -425,7 +441,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     return Column(
       children: [
-        Expanded(child: lyricsBody),
+        Expanded(
+          child: _lyricsExpanded
+              ? lyricsBody
+              // Compact mode: ≈3 synced entries centred in the artwork slot.
+              // The viewport is bounded (never the lyrics' intrinsic height);
+              // SyncedLyricsView fades its own top/bottom edges.
+              : Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                        maxHeight: PlayerControlMetrics.compactLyricsHeight),
+                    child: lyricsBody,
+                  ),
+                ),
+        ),
         // ── Expand/collapse handle ──
         GestureDetector(
           onTap: () => setState(() => _lyricsExpanded = !_lyricsExpanded),
@@ -551,13 +580,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
               minWidth: PlayerControlMetrics.minTouchTarget,
               minHeight: PlayerControlMetrics.minTouchTarget,
             ),
+            
             icon: Container(
               width: PlayerControlMetrics.addRing,
               height: PlayerControlMetrics.addRing,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.white54, width: 2),
+                border: Border.all(
+                    color: Colors.white54,
+                    width: PlayerControlMetrics.addRingBorder),
               ),
+
               child: const Icon(Icons.add,
                   color: Colors.white, size: PlayerControlMetrics.addIcon),
             ),
@@ -603,15 +636,20 @@ class _PlayerControlsState extends State<_PlayerControls> {
   Widget build(BuildContext context) {
     final controller = context.read<PlaybackController>();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final m = PlayerControlMetrics.forWidth(constraints.maxWidth);
-        BoxConstraints box(double side) =>
-            BoxConstraints(minWidth: side, minHeight: side);
+    
+    // Parent is an OverflowBox with unbounded width: derive the width from the
+    // screen instead (same input the artwork budget used).
+    final contentWidth =
+        MediaQuery.sizeOf(context).width - 2 * kPlayerHorizontalPadding;
+    final m = PlayerControlMetrics.forWidth(contentWidth);
+    BoxConstraints box(double side) =>
+        BoxConstraints(minWidth: side, minHeight: side);
 
-        return SizedBox(
+    return SizedBox(
+          width: m.rowWidth,
           height: m.rowHeight,
           child: Row(
+
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               // Shuffle
@@ -640,22 +678,32 @@ class _PlayerControlsState extends State<_PlayerControls> {
                 builder: (_, isPlaying, __) => GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: controller.togglePlayPause,
+                  
                   child: SizedBox(
                     width: m.playBox,
-                    height: m.playBox,
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 100),
-                      transitionBuilder: (child, animation) {
-                        return ScaleTransition(scale: animation, child: child);
-                      },
-                      child: Icon(
-                        isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                        key: ValueKey<bool>(isPlaying),
-                        size: m.playIcon,
-                        color: Colors.white,
+                    height: m.rowHeight,
+                    // The glyph's em box is taller than the visible triangle;
+                    // let it overflow the (glyph-sized) row so the empty
+                    // quarters above/below do not add vertical spacing.
+                    child: OverflowBox(
+                      alignment: Alignment.center,
+                      minHeight: 0,
+                      maxHeight: m.playIcon,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 100),
+                        transitionBuilder: (child, animation) {
+                          return ScaleTransition(scale: animation, child: child);
+                        },
+                        child: Icon(
+                          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                          key: ValueKey<bool>(isPlaying),
+                          size: m.playIcon,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ),
+
                 ),
               ),
               // Next
@@ -684,15 +732,15 @@ class _PlayerControlsState extends State<_PlayerControls> {
                   onPressed: controller.toggleLoop,
                 ),
               ),
+            
             ],
           ),
         );
-      },
-    );
   }
 }
 
 // ── Lower Actions (Device Output + Queue) ───────────────────────────────────
+
 
 class _LowerActions extends StatelessWidget {
   const _LowerActions();

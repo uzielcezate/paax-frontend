@@ -90,7 +90,8 @@ class _ProfileView extends StatelessWidget {
                   ),
           ),
           _buildTopFade(),
-          _buildBottomFade(context),
+          // (V4 §1) The bottom fade is painted once by the MainWrapper dock;
+          // no per-screen bottom gradient here, so nothing stacks.
         ],
       ),
     );
@@ -470,31 +471,6 @@ class _ProfileView extends StatelessWidget {
     );
   }
 
-  Widget _buildBottomFade(BuildContext context) {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 0,
-      child: IgnorePointer(
-        child: Container(
-          height: context.read<PlaybackController>().currentTrack != null ? 240 : 160,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.bottomCenter,
-              end: Alignment.topCenter,
-              colors: [
-                const Color(0xFF121212).withValues(alpha: 0.96),
-                const Color(0xFF121212).withValues(alpha: 0.65),
-                const Color(0xFF121212).withValues(alpha: 0.25),
-                const Color(0xFF121212).withValues(alpha: 0.0),
-              ],
-              stops: const [0.0, 0.35, 0.65, 1.0],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Avatar widget with network image + initials fallback ──────────────────────

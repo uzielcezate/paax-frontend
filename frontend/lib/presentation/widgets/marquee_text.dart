@@ -51,12 +51,31 @@ class MarqueeController extends ChangeNotifier {
 ///   so snapping the controller back to 0 is pixel-identical (no overshoot,
 ///   no snapback). The distance used by the painter and the distance used by
 ///   the animation are the same field, read at paint time.
-/// - Edge fades are driven by the live scroll offset, not by the overflow
-///   flag: at rest (offset 0, i.e. before a cycle starts and after it ends)
-///   there is no fade; the fade ramps in over the first [fadeMaskWidth] px of
-///   travel and ramps out over the last [fadeMaskWidth] px.
+/// - Edge fades: while the text overflows, the *right* edge always carries a
+///   subtle fade (also at rest) so a clipped title never reads as complete
+///   ("Puesto Pa' Guerr" for "Puesto Pa' Guerrial"). The *left* edge follows
+///   the live scroll offset: none at rest (offset 0, before a cycle starts
+///   and after it ends), ramping in over the first [fadeMaskWidth] px of
+///   travel and out over the last [fadeMaskWidth] px. Text that fits has no
+///   fade on either edge. See [marqueeEdgeFades].
 /// - Text / style / scale / width changes invalidate the running cycle via a
 ///   generation token, reset the offset to 0 and re-measure.
+/// Edge-fade strengths (0 = none, 1 = full) for an overflowing marquee at
+/// scroll [offset] of a cycle [distance] px long with a ramp of [fadeWidth].
+///
+/// Pure, so the painter and the tests share one definition.
+({double left, double right}) marqueeEdgeFades({
+  required double offset,
+  required double distance,
+  required double fadeWidth,
+}) {
+  if (fadeWidth <= 0) return (left: 0, right: 0);
+  final left = distance <= 0
+      ? 0.0
+      : (math.min(offset, distance - offset) / fadeWidth).clamp(0.0, 1.0);
+  return (left: left, right: 1.0);
+}
+
 class MarqueeText extends StatefulWidget {
   final String text;
   final TextStyle style;
@@ -101,6 +120,10 @@ class _MarqueeTextState extends State<MarqueeText>
   /// Pixel distance of the cycle currently running. Read by the painter on
   /// every tick so the painter and the animation can never disagree.
   double _cycleDistance = 0;
+
+  /// Test hook: distance of the running cycle (0 before the first travel).
+  @visibleForTesting
+  double get debugCycleDistance => _cycleDistance;
 
   bool _needsScroll = false;
   bool _cycleComplete = false;
@@ -363,12 +386,11 @@ class _MarqueeTextState extends State<MarqueeText>
         builder: (context, child) {
           final dist = _cycleDistance;
           final offset = _anim.value * dist;
-          // Fade strength follows the live offset: 0 at rest, ramps in over
-          // the first fadeMaskWidth px and out over the last fadeMaskWidth px.
+          // Right fade is permanent while overflowing; left fade follows the
+          // live offset (0 at rest, ramps over fadeMaskWidth px).
           final fadeW = widget.fadeMaskWidth;
-          final fade = fadeW <= 0 || dist <= 0
-              ? 0.0
-              : (math.min(offset, dist - offset) / fadeW).clamp(0.0, 1.0);
+          final fades =
+              marqueeEdgeFades(offset: offset, distance: dist, fadeWidth: fadeW);
 
           // deferToChild: width = incoming max (clipped), height = content
           // height — so this also works inside an unbounded-height Column
@@ -383,16 +405,19 @@ class _MarqueeTextState extends State<MarqueeText>
               child: child,
             ),
           );
-          if (fade <= 0) return translated; // stationary: sharp clip, no mask
+          if (fades.left <= 0 && fades.right <= 0) return translated;
 
           return ShaderMask(
             shaderCallback: (Rect bounds) {
               final w = bounds.width <= 0 ? 1.0 : bounds.width;
               final leftEdge = (fadeW / w).clamp(0.0, 0.15);
-              final rightEdge = ((fadeW + 2) / w).clamp(0.0, 0.15);
-              final edge = Colors.white.withValues(alpha: 1.0 - fade);
+              // A slightly wider ramp on the right keeps the permanent fade
+              // soft rather than a hard-looking cut.
+              final rightEdge = ((fadeW * 1.5) / w).clamp(0.0, 0.2);
+              final left = Colors.white.withValues(alpha: 1.0 - fades.left);
+              final right = Colors.white.withValues(alpha: 1.0 - fades.right);
               return LinearGradient(
-                colors: [edge, Colors.white, Colors.white, edge],
+                colors: [left, Colors.white, Colors.white, right],
                 stops: [0.0, leftEdge, 1.0 - rightEdge, 1.0],
               ).createShader(bounds);
             },

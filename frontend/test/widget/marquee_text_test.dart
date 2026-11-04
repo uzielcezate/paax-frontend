@@ -2,9 +2,11 @@
 //
 // Contract of the constraint-aware MarqueeText:
 // - text that fits never animates and never shows an edge fade;
-// - overflowing text is stationary (offset 0, sharp clip, no ShaderMask)
-//   until the cycle starts, fades only while actually moving, and returns to
-//   an exact offset 0 at the end of each cycle (no overshoot / snapback);
+// - overflowing text is stationary (offset 0) until the cycle starts; its
+//   right edge always carries a subtle fade (so a clipped title never reads
+//   as complete), the left edge fades only while actually moving, and the
+//   offset returns to an exact 0 at the end of each cycle (no overshoot /
+//   snapback);
 // - a width change re-evaluates overflow: when the text now fits the marquee
 //   stops at offset 0 with a single copy; when it overflows again it restarts;
 // - a text change resets the animation state.
@@ -55,6 +57,19 @@ Finder get _marqueeMask => find.descendant(
       matching: find.byType(ShaderMask),
     );
 
+/// Left/right alpha of the mask's gradient (1 = opaque text, 0 = faded out).
+({double left, double right}) _maskEdges(WidgetTester tester) {
+  expect(_marqueeMask, findsOneWidget);
+  // The mask's gradient cannot be read back from the shader; re-derive the
+  // edge alphas from the live offset through the shared helper.
+  final t = tester.widget<Transform>(_marqueeTransform);
+  final offset = -t.transform.getTranslation().x;
+  final state = tester.state(find.byType(MarqueeText)) as dynamic;
+  final dist = state.debugCycleDistance as double;
+  final f = marqueeEdgeFades(offset: offset, distance: dist, fadeWidth: 16);
+  return (left: 1 - f.left, right: 1 - f.right);
+}
+
 double _offsetOf(WidgetTester tester) {
   final t = tester.widget<Transform>(_marqueeTransform);
   return -t.transform.getTranslation().x;
@@ -70,16 +85,21 @@ void main() {
     expect(_marqueeMask, findsNothing);
   });
 
-  testWidgets('overflowing text is stationary and unfaded before the cycle',
+  testWidgets(
+      'overflowing text is stationary before the cycle: right fade only',
       (tester) async {
     await tester.pumpWidget(_host(_long, width: 120));
     await tester.pump(); // post-frame: content measured, loop scheduled
     expect(find.text(_long), findsNWidgets(2)); // two copies for the loop
     expect(_offsetOf(tester), 0);
-    expect(_marqueeMask, findsNothing);
+    expect(_marqueeMask, findsOneWidget); // permanent right-edge fade
+    final edges = _maskEdges(tester);
+    expect(edges.left, 1.0); // left edge sharp at rest
+    expect(edges.right, 0.0); // right edge faded out
   });
 
-  testWidgets('fade appears only while scrolling and the cycle ends at 0',
+  testWidgets(
+      'left fade appears only while scrolling; right fade persists; cycle ends at 0',
       (tester) async {
     await tester.pumpWidget(_host(_long, width: 120));
     await tester.pump();
@@ -89,11 +109,35 @@ void main() {
     final mid = _offsetOf(tester);
     expect(mid, greaterThan(16));
     expect(_marqueeMask, findsOneWidget);
+    final moving = _maskEdges(tester);
+    expect(moving.left, 0.0); // left fade fully in while moving
+    expect(moving.right, 0.0);
 
     // Let the cycle complete (travel is well under 2s at 400 px/s).
     await tester.pump(const Duration(seconds: 3));
     expect(_offsetOf(tester), 0); // exact reset, no overshoot
-    expect(_marqueeMask, findsNothing);
+    final rest = _maskEdges(tester);
+    expect(rest.left, 1.0); // left fade gone again
+    expect(rest.right, 0.0); // right fade stays
+  });
+
+  test('marqueeEdgeFades: right permanent, left follows the offset', () {
+    const d = 300.0, w = 16.0;
+    expect(marqueeEdgeFades(offset: 0, distance: d, fadeWidth: w),
+        (left: 0.0, right: 1.0));
+    expect(marqueeEdgeFades(offset: 8, distance: d, fadeWidth: w).left,
+        closeTo(0.5, 1e-9));
+    expect(marqueeEdgeFades(offset: 150, distance: d, fadeWidth: w),
+        (left: 1.0, right: 1.0));
+    expect(marqueeEdgeFades(offset: d - 4, distance: d, fadeWidth: w).left,
+        closeTo(0.25, 1e-9));
+    expect(marqueeEdgeFades(offset: d, distance: d, fadeWidth: w),
+        (left: 0.0, right: 1.0));
+    // Fade disabled → no mask on either edge; distance 0 → right only.
+    expect(marqueeEdgeFades(offset: 10, distance: d, fadeWidth: 0),
+        (left: 0.0, right: 0.0));
+    expect(marqueeEdgeFades(offset: 0, distance: 0, fadeWidth: w),
+        (left: 0.0, right: 1.0));
   });
 
   testWidgets('offset never exceeds the measured cycle distance',
@@ -148,7 +192,7 @@ void main() {
     await tester.pump();
     expect(find.text(_long), findsNWidgets(2));
     expect(_offsetOf(tester), 0);
-    expect(_marqueeMask, findsNothing);
+    expect(_maskEdges(tester).left, 1.0);
     await tester.pump(const Duration(milliseconds: 250));
     await tester.pump(const Duration(milliseconds: 200));
     expect(_offsetOf(tester), greaterThan(0));
@@ -166,7 +210,7 @@ void main() {
     await tester.pumpWidget(_host(_long, width: 160));
     await tester.pump();
     expect(_offsetOf(tester), 0);
-    expect(_marqueeMask, findsNothing);
+    expect(_maskEdges(tester).left, 1.0); // sharp left again
   });
 
   testWidgets('a track change resets the marquee', (tester) async {

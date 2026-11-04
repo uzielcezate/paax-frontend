@@ -46,6 +46,9 @@ class OverflowMenu extends StatelessWidget {
   /// read-only playlists, which must never show the remove action.
   final bool canEditPlaylistContext;
   final Color? iconColor;
+
+  /// Visual size of the three-dot glyph (the Full Player uses a larger one).
+  final double iconSize;
   // Phase 3.4.1 role gating: owner/editor sees manage items; a non-member sees
   // Unfollow + Add-to-playlist instead of Edit Order / Edit / Delete.
   final bool canManage;
@@ -65,6 +68,7 @@ class OverflowMenu extends StatelessWidget {
   const OverflowMenu({
     super.key,
     required this.type,
+    this.iconSize = 26,
     this.track,
     this.album,
     this.artist,
@@ -129,7 +133,7 @@ class OverflowMenu extends StatelessWidget {
     return GestureDetector(
       onTap: () => _showMenu(context),
       behavior: HitTestBehavior.opaque,
-      child: Icon(Icons.more_vert_rounded, color: iconColor ?? Colors.white, size: 26),
+      child: Icon(Icons.more_vert_rounded, color: iconColor ?? Colors.white, size: iconSize),
     );
   }
 }

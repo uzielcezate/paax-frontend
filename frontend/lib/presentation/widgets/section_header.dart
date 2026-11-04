@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/responsive.dart';
+import 'paax_pill.dart';
 
 class SectionHeader extends StatelessWidget {
   final String title;
@@ -11,10 +12,11 @@ class SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
+      // V4 §4: headings share the floating bars' horizontal inset.
       padding: EdgeInsets.fromLTRB(
-          Responsive.spacing(context), 
-          Responsive.value(context, mobile: 24, tablet: 32), 
-          Responsive.spacing(context), 
+          PaaxLayout.contentHorizontalInset(context),
+          Responsive.value(context, mobile: 24, tablet: 32),
+          PaaxLayout.contentHorizontalInset(context),
           Responsive.value(context, mobile: 16, tablet: 20)
       ),
       child: Row(

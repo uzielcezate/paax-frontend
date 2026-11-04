@@ -17,7 +17,6 @@ import '../state/library_controller.dart';
 import '../state/playback_controller.dart';
 import '../widgets/music_card.dart';
 import 'album_detail_screen.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/mini_player.dart';
 import '../widgets/track_list_tile.dart';
 import '../widgets/overflow_menu.dart';
@@ -33,6 +32,8 @@ import '../../core/utils/dominant_color_service.dart';
 import '../../core/utils/responsive.dart';
 import '../../core/utils/string_utils.dart';
 import '../widgets/artist_header_style.dart';
+import '../widgets/paax_top_bar.dart';
+import '../widgets/paax_pill.dart';
 
  class ArtistDetailScreen extends StatefulWidget {
   // ... (unchanged)
@@ -513,7 +514,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
               // 2. Action Buttons Row (Below Image)
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context)),
                   child: Column(
                     children: [
                       SizedBox(
@@ -614,76 +615,18 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
           ),
 
           // ── 3. Edge Fades ──
-          DynamicEdgeFade.dynamicBottom(
-            key: ValueKey('fade_bot_artist_${widget.artistId}'),
-            color: AppColors.background,
-            height: 120,
-          ),
+          // (V4 §1) bottom fade is painted once by the MainWrapper dock.
 
-          // ── 4. Clean local top navigation bar ──
+          // ── 4. Local top navigation bar (sculpted pills) ──
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  color: _showTitle ? AppColors.background : Colors.transparent,
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top,
-                  ),
-                  child: SizedBox(
-                    height: 58,
-                    child: Stack(
-                      children: [
-                        // Left: back button — fixed position
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                        ),
-                        // Center: title — absolute center, independent of icons
-                        Positioned.fill(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: _showTitle ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 56),
-                                child: Text(
-                                  widget.artistName,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Right: overflow menu — fixed position
-                        Positioned(
-                          right: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: SizedBox(
-                              width: 48,
-                              height: 48,
-                              child: Center(
-                                child: OverflowMenu(
+            child: PaaxTopBar(
+              title: widget.artistName,
+              showTitle: _showTitle,
+              onBack: () => Navigator.pop(context),
+              trailing: OverflowMenu(
                                   type: MenuType.artist,
                                   artist: Artist(
                                     id: _resolvedArtistId,
@@ -692,30 +635,6 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                                   ),
                                   iconColor: Colors.white,
                                 ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Soft bottom fade overlay
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        _showTitle ? AppColors.background : Colors.transparent,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -731,24 +650,30 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
     double iconSize = 22,
     bool primary = false,
   }) {
+    // UI Visual System V2 §8: same width/height/icon size as before; only the
+    // surface changed. The primary Play stays a flat white disc.
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: primary ? Colors.white : Colors.white.withValues(alpha: 0.08),
-          border: primary ? null : Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
-        ),
-        child: Center(
-          child: Icon(
-            icon,
-            color: primary ? const Color(0xFF121212) : Colors.white,
-            size: iconSize,
-          ),
-        ),
-      ),
+      behavior: HitTestBehavior.opaque,
+      child: primary
+          ? Container(
+              width: size,
+              height: size,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+              child: Center(
+                child: Icon(icon, color: const Color(0xFF121212), size: iconSize),
+              ),
+            )
+          : PaaxPillSurface(
+              width: size,
+              height: size,
+              child: Center(
+                child: Icon(icon, color: Colors.white, size: iconSize),
+              ),
+            ),
     );
   }
 
@@ -765,7 +690,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
         return SliverList(
           delegate: SliverChildBuilderDelegate(
             (context, index) {
-              if (index == 0) return Padding(padding: const EdgeInsets.fromLTRB(20, 8, 20, 8), child: Text("Popular", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)));
+              if (index == 0) return Padding(padding: EdgeInsets.fromLTRB(PaaxLayout.contentHorizontalInset(context), 8, PaaxLayout.contentHorizontalInset(context), 8), child: Text("Popular", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)));
               final track = displayTracks[index - 1];
               return TrackListTile(
                  track: track, 
@@ -805,7 +730,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
 
         return SliverToBoxAdapter(
           child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+            padding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -892,14 +817,14 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
                Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                padding: EdgeInsets.fromLTRB(PaaxLayout.contentHorizontalInset(context), 24, PaaxLayout.contentHorizontalInset(context), 12),
                 child: Text('Albums',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white)),
               ),
               SizedBox(
                 height: cardHeight,
                 child: ListView.builder(
-                  padding: EdgeInsets.only(left: Responsive.spacing(context)),
+                  padding: EdgeInsets.only(left: PaaxLayout.contentHorizontalInset(context)),
                   scrollDirection: Axis.horizontal,
                   physics: const ClampingScrollPhysics(),
                   primary: false,
@@ -934,7 +859,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                padding: EdgeInsets.fromLTRB(PaaxLayout.contentHorizontalInset(context), 24, PaaxLayout.contentHorizontalInset(context), 12),
                 child: Row(
                   children: [
                     Text('Singles & EPs',
@@ -956,7 +881,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                 SizedBox(
                   height: cardHeight,
                   child: ListView.builder(
-                    padding: EdgeInsets.only(left: Responsive.spacing(context)),
+                    padding: EdgeInsets.only(left: PaaxLayout.contentHorizontalInset(context)),
                     scrollDirection: Axis.horizontal,
                     physics: const ClampingScrollPhysics(),
                     primary: false,
@@ -973,7 +898,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
                   child: SizedBox(
                     height: cardHeight,
                     child: ListView.builder(
-                      padding: EdgeInsets.only(left: Responsive.spacing(context)),
+                      padding: EdgeInsets.only(left: PaaxLayout.contentHorizontalInset(context)),
                       scrollDirection: Axis.horizontal,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: 3,
@@ -1008,7 +933,7 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
         return SliverToBoxAdapter(
           child: Padding(
             padding: EdgeInsets.symmetric(
-              horizontal: Responsive.spacing(context),
+              horizontal: PaaxLayout.contentHorizontalInset(context),
               vertical: 20,
             ),
             child: OutlinedButton(
@@ -1074,11 +999,11 @@ class _ArtistDetailScreenState extends State<ArtistDetailScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-               Padding(padding: EdgeInsets.all(Responsive.spacing(context)), child: Text("Fans Also Like", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white))),
+               Padding(padding: EdgeInsets.fromLTRB(PaaxLayout.contentHorizontalInset(context), 24, PaaxLayout.contentHorizontalInset(context), 12), child: Text("Fans Also Like", style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white))),
                SizedBox(
                  height: height,
                  child: ListView.builder(
-                   padding: EdgeInsets.only(left: Responsive.spacing(context)),
+                   padding: EdgeInsets.only(left: PaaxLayout.contentHorizontalInset(context)),
                    scrollDirection: Axis.horizontal,
                    physics: const ClampingScrollPhysics(),
                    primary: false,

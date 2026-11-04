@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
-import '../../core/utils/responsive.dart';
 import '../../core/image/lh3_url_builder.dart';
 import '../../domain/entities/saved_album.dart';
 import '../widgets/app_image.dart';
 import '../widgets/bottom_content_padding.dart';
-import '../widgets/glass_surface.dart';
+import '../widgets/paax_pill.dart';
+import '../widgets/paax_top_bar.dart';
 import '../../core/utils/string_utils.dart';
 import 'album_detail_screen.dart';
 import '../../core/utils/dominant_color_service.dart';
@@ -87,8 +87,9 @@ class _ArtistDiscographyScreenState extends State<ArtistDiscographyScreen> {
   @override
   Widget build(BuildContext context) {
     final topPadding = MediaQuery.of(context).padding.top;
-    // Header: status bar + 6 + title row (40) + 10 + chips (34) + 12
-    final fixedHeaderHeight = topPadding + 6 + 40 + 10 + 34 + 12;
+    // Header: status bar + title row (58) + pills row (34 + 8 shadow room) + 4.
+    final fixedHeaderHeight = topPadding + kDiscographyHeaderBelowStatus;
+    final inset = PaaxLayout.floatingInset(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -107,126 +108,90 @@ class _ArtistDiscographyScreenState extends State<ArtistDiscographyScreen> {
           ),
 
           // Bottom fade — dissolves content behind mini player / nav
-          DynamicEdgeFade.dynamicBottom(
-            key: ValueKey('fade_bot_discography_${widget.artistName}'),
-            color: AppColors.background,
-          ),
+          // (V4 §1) bottom fade is painted once by the MainWrapper dock.
 
+          // ── Pinned header: back pill + title + filter pills over ONE
+          // atmospheric fade (V3 §5). No opaque rectangles; the fade plateaus
+          // behind the pills and dissolves into the content, following scroll.
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Stack(
               children: [
-                // Title bar
-                Container(
-                  color: AppColors.background,
+                ValueListenableBuilder<double>(
+                  valueListenable: _scrollOffset,
+                  builder: (_, offset, __) => PaaxHeaderFade(
+                    plateau: topPadding + kDiscographyFadePlateau,
+                    opacity: (offset / 40.0).clamp(0.0, 1.0),
+                  ),
+                ),
+                Padding(
                   padding: EdgeInsets.only(top: topPadding),
-                  child: SizedBox(
-                    height: 58,
-                    child: Stack(
-                      children: [
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: IconButton(
-                              icon: Icon(Icons.arrow_back_ios_new_rounded, color: widget.foregroundColor, size: 24),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                        ),
-                        Positioned.fill(
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 56),
-                              child: Text(
-                                'Discography',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: widget.foregroundColor,
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w800,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Title bar
+                      SizedBox(
+                        height: PaaxLayout.topBarHeight,
+                        child: Stack(
+                          children: [
+                            Positioned(
+                              left: PaaxTopBar.controlOffset(inset),
+                              top: 0,
+                              bottom: 0,
+                              child: Center(
+                                child: PaaxIconPill(
+                                  icon: Icons.arrow_back_ios_new_rounded,
+                                  iconSize: PaaxTopBar.backIconSize,
+                                  foregroundColor: widget.foregroundColor,
+                                  semanticLabel: 'Back',
+                                  onTap: () => Navigator.pop(context),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Filter chips row
-                Container(
-                  color: AppColors.background,
-                  padding: const EdgeInsets.only(left: 16, bottom: 12),
-                  child: Builder(builder: (context) {
-                    final isLightBg = DominantColorService.isLight(widget.dominantColor);
-                    final chipSelectedColor = isLightBg ? Colors.black : Colors.white;
-                    final chipSelectedTextColor = isLightBg ? Colors.white : Colors.black;
-                    return SizedBox(
-                      height: 34,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const ClampingScrollPhysics(),
-                        children: List.generate(_filterLabels.length, (i) {
-                          final selected = _selectedFilter == i;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: GestureDetector(
-                              onTap: () => setState(() => _selectedFilter = i),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  color: selected ? chipSelectedColor : AppColors.surface,
-                                  borderRadius: BorderRadius.circular(17),
-                                ),
-                                child: Text(
-                                  _filterLabels[i],
-                                  style: TextStyle(
-                                    color: selected ? chipSelectedTextColor : widget.foregroundColor.withOpacity(0.8),
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                            Positioned.fill(
+                              child: Center(
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                      horizontal: inset +
+                                          PaaxLayout.topBarPill +
+                                          PaaxTopBar.titleGap),
+                                  child: Text(
+                                    'Discography',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: widget.foregroundColor,
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          );
-                        }),
-                      ),
-                    );
-                  }),
-                ),
-                // Scroll-triggered fade tail below controls
-                ValueListenableBuilder<double>(
-                  valueListenable: _scrollOffset,
-                  builder: (_, offset, __) {
-                    final fadeOpacity = (offset / 8.0).clamp(0.0, 1.0);
-                    return IgnorePointer(
-                      child: Opacity(
-                        opacity: fadeOpacity,
-                        child: Container(
-                          height: 45,
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                AppColors.background,
-                                Colors.transparent,
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
-                    );
-                  },
+                      // Filter pills row (34dp pills + 4dp shadow room above
+                      // and below).
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: PaaxSegmentedPills(
+                          labels: _filterLabels,
+                          selectedIndex: _selectedFilter,
+                          onSelected: (i) => setState(() => _selectedFilter = i),
+                          height: 34,
+                          gap: 8,
+                          padding: EdgeInsets.only(left: inset, right: 8),
+                          inactiveForeground:
+                              widget.foregroundColor.withValues(alpha: 0.65),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -256,7 +221,7 @@ class _ArtistDiscographyScreenState extends State<ArtistDiscographyScreen> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.symmetric(
-        horizontal: Responsive.spacing(context),
+        horizontal: PaaxLayout.contentHorizontalInset(context),
       ),
       itemCount: releases.length,
       itemBuilder: (context, index) {
@@ -272,7 +237,7 @@ class _ArtistDiscographyScreenState extends State<ArtistDiscographyScreen> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: EdgeInsets.symmetric(
-        horizontal: Responsive.spacing(context),
+        horizontal: PaaxLayout.contentHorizontalInset(context),
       ),
       children: [
         // Latest Release hero
@@ -459,3 +424,12 @@ class _ArtistDiscographyScreenState extends State<ArtistDiscographyScreen> {
     );
   }
 }
+
+/// Discography pinned-header geometry below the status inset: title row +
+/// pill row (34 + 8 shadow room) + 4. Shared by the scroll spacer and the fade.
+const double kDiscographyHeaderBelowStatus =
+    PaaxLayout.topBarHeight + 34 + PaaxSegmentedPills.shadowRoom + 4;
+
+/// Fade plateau (from the status inset) down to the pill row's centre.
+const double kDiscographyFadePlateau =
+    PaaxLayout.topBarHeight + (34 + PaaxSegmentedPills.shadowRoom) / 2;

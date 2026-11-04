@@ -5,13 +5,13 @@ import '../../core/utils/responsive.dart';
 import '../state/auth_controller.dart';
 import '../state/home_controller.dart';
 import '../state/library_controller.dart';
-import '../state/playback_controller.dart';
 import '../../data/repositories/home_repository.dart';
 import '../../domain/entities/saved_album.dart';
 import '../../domain/entities/artist.dart';
 import '../../domain/entities/genre.dart';
 import '../widgets/notification_bell.dart';
 import '../widgets/section_header.dart';
+import '../widgets/paax_pill.dart';
 import '../widgets/music_card.dart';
 import '../widgets/error_state_widget.dart';
 import 'album_detail_screen.dart';
@@ -189,31 +189,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-          // ── Bottom edge fade ──
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: IgnorePointer(
-              child: Container(
-                height:
-                    context.read<PlaybackController>().currentTrack != null ? 240 : 160,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      AppColors.background.withValues(alpha: 0.96),
-                      AppColors.background.withValues(alpha: 0.65),
-                      AppColors.background.withValues(alpha: 0.25),
-                      AppColors.background.withValues(alpha: 0.0),
-                    ],
-                    stops: const [0.0, 0.35, 0.65, 1.0],
-                  ),
-                ),
-              ),
-            ),
-          ),
+          // (V4 §1) The bottom fade is painted once by the MainWrapper dock;
+          // no per-screen bottom gradient here, so nothing stacks.
         ],
       ),
     );
@@ -221,7 +198,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader(BuildContext context, String greeting, String userName) {
     return Padding(
-      padding: const EdgeInsets.all(20.0),
+      padding: EdgeInsets.fromLTRB(PaaxLayout.contentHorizontalInset(context),
+          20, PaaxLayout.contentHorizontalInset(context), 20),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -281,8 +259,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SizedBox(
           height: cardHeight,
           child: ListView.builder(
-            padding:
-                EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+            padding: EdgeInsets.only(
+                left: PaaxLayout.contentHorizontalInset(context),
+                right: PaaxLayout.contentHorizontalInset(context) -
+                    Responsive.spacing(context)),
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),
             primary: false,
@@ -322,8 +302,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SizedBox(
           height: cardHeight,
           child: ListView.builder(
-            padding:
-                EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+            padding: EdgeInsets.only(
+                left: PaaxLayout.contentHorizontalInset(context),
+                right: PaaxLayout.contentHorizontalInset(context) -
+                    Responsive.spacing(context)),
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),
             primary: false,
@@ -370,8 +352,10 @@ class _HomeScreenState extends State<HomeScreen> {
         SizedBox(
           height: cardHeight,
           child: ListView.builder(
-            padding:
-                EdgeInsets.symmetric(horizontal: Responsive.spacing(context)),
+            padding: EdgeInsets.only(
+                left: PaaxLayout.contentHorizontalInset(context),
+                right: PaaxLayout.contentHorizontalInset(context) -
+                    Responsive.spacing(context)),
             scrollDirection: Axis.horizontal,
             physics: const ClampingScrollPhysics(),
             primary: false,

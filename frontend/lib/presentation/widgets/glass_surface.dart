@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import 'paax_pill.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Paax Surface System — Phase 1 (Cinematic Black)
@@ -205,12 +206,11 @@ class GlassPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PaaxGlassSurface(
+    // UI Visual System V2: sculpted pill surface.
+    return PaaxPillSurface(
       width: width,
       height: height,
-      borderRadius: BorderRadius.circular(height / 2),
       showShadow: showShadow,
-      enableBlur: enableBlur,
       padding: padding,
       child: child,
     );
@@ -306,30 +306,13 @@ class GlassCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    // UI Visual System V2: sculpted pill surface, same size / icon size.
+    return PaaxIconPill(
+      icon: icon,
       onTap: onPressed,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: Colors.white.withOpacity(0.08),
-            width: 0.5,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.10),
-              blurRadius: 8,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
-        child: Center(
-          child: Icon(icon, size: iconSize, color: iconColor),
-        ),
-      ),
+      size: size,
+      iconSize: iconSize,
+      foregroundColor: iconColor,
     );
   }
 }

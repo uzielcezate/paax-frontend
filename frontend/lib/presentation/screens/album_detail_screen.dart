@@ -13,12 +13,13 @@ import '../../domain/repositories/music_repository.dart';
 import '../state/playback_controller.dart';
 import '../state/library_controller.dart';
 import '../widgets/mini_player.dart';
-import '../widgets/glass_surface.dart';
 import '../widgets/track_list_tile.dart';
 import '../widgets/overflow_menu.dart';
 import '../widgets/bottom_content_padding.dart';
 import '../widgets/add_to_playlist_sheet.dart';
 import '../widgets/app_image.dart';
+import '../widgets/paax_top_bar.dart';
+import '../widgets/paax_pill.dart';
 import '../../core/image/lh3_url_builder.dart';
 import '../../core/utils/string_utils.dart';
 import 'artist_detail_screen.dart';
@@ -410,7 +411,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
 
                     // Foreground Rigid Layout
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      padding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context)),
                       child: Builder(
                         builder: (context) {
                           final double screenWidth = MediaQuery.of(context).size.width;
@@ -692,76 +693,18 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
           ),
 
           // ── 3. Edge Fades for Cinematic Transitions ──
-          DynamicEdgeFade.dynamicBottom(
-            key: ValueKey('fade_bot_album_${widget.album?.albumId ?? widget.singleDetail?.track.id}'),
-            color: AppColors.background,
-            height: 120,
-          ),
+          // (V4 §1) bottom fade is painted once by the MainWrapper dock.
 
-          // ── 4. Clean local top navigation bar ──
+          // ── 4. Local top navigation bar (sculpted pills) ──
           Positioned(
             top: 0,
             left: 0,
             right: 0,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  color: _showTitle ? AppColors.background : Colors.transparent,
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top,
-                  ),
-                  child: SizedBox(
-                    height: 58,
-                    child: Stack(
-                      children: [
-                        // Left: back button — fixed position
-                        Positioned(
-                          left: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 24),
-                              onPressed: () => Navigator.pop(context),
-                            ),
-                          ),
-                        ),
-                        // Center: title — absolute center, independent of icons
-                        Positioned.fill(
-                          child: Center(
-                            child: AnimatedOpacity(
-                              opacity: _showTitle ? 1.0 : 0.0,
-                              duration: const Duration(milliseconds: 150),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 56),
-                                child: Text(
-                                  _title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 19,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        // Right: overflow menu — fixed position
-                        Positioned(
-                          right: 4,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: SizedBox(
-                              width: 48,
-                              height: 48,
-                              child: Center(
-                                child: _isSingleMode
+            child: PaaxTopBar(
+              title: _title,
+              showTitle: _showTitle,
+              onBack: () => Navigator.pop(context),
+              trailing: _isSingleMode
                                     ? OverflowMenu(
                                         type: MenuType.track,
                                         track: widget.singleDetail!.track,
@@ -772,30 +715,6 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                                         album: _resolvedAlbum,
                                         iconColor: Colors.white,
                                       ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Soft bottom fade overlay
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        _showTitle ? AppColors.background : Colors.transparent,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -811,24 +730,30 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
     double iconSize = 22,
     bool primary = false,
   }) {
+    // UI Visual System V2 §8: same width/height/icon size as before; only the
+    // surface changed. The primary Play stays a flat white disc.
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: primary ? Colors.white : Colors.white.withValues(alpha: 0.08),
-          border: primary ? null : Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1),
-        ),
-        child: Center(
-          child: Icon(
-            icon,
-            color: primary ? const Color(0xFF121212) : Colors.white,
-            size: iconSize,
-          ),
-        ),
-      ),
+      behavior: HitTestBehavior.opaque,
+      child: primary
+          ? Container(
+              width: size,
+              height: size,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+              child: Center(
+                child: Icon(icon, color: const Color(0xFF121212), size: iconSize),
+              ),
+            )
+          : PaaxPillSurface(
+              width: size,
+              height: size,
+              child: Center(
+                child: Icon(icon, color: Colors.white, size: iconSize),
+              ),
+            ),
     );
   }
 
@@ -845,10 +770,11 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
       baseColor: AppColors.surfaceLight,
       highlightColor: const Color(0xFF3A3A4A),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: PaaxLayout.contentHorizontalInset(context), vertical: 10),
         child: Row(
           children: [
             // Index number placeholder
+
             Container(width: 20, height: 14, color: Colors.white),
             const SizedBox(width: 16),
             // Title + artist stack

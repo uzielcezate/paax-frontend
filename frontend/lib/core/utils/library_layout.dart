@@ -18,6 +18,11 @@ class LibraryLayout {
   /// Normal breathing gap between the search row and the first list item.
   static const double gap = 8.0;
 
+  /// Distance from the header's bottom edge up to the vertical centre of the
+  /// search/sort row (56dp row: 6dp padding + 44dp controls + 6dp). The
+  /// header fade plateaus there and dissolves below (V3 §5).
+  static const double fadePlateauLift = 6.0 + 44.0 / 2;
+
   /// Top inset for a Library list. [measuredHeader] is the measured floating
   /// header height (0 until measured); [safeTop] is the top safe-area padding.
   static double listTopInset({
