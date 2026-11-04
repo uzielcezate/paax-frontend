@@ -29,7 +29,7 @@ class TrackAdapter extends TypeAdapter<Track> {
       artists: (fields[9] as List?)
           ?.map((dynamic e) => (e as Map).cast<String, String>())
           ?.toList(),
-      isExplicit: fields[10] as bool,
+      isExplicit: fields[10] == null ? false : fields[10] as bool,
       deezerTrackId: fields[11] as String?,
     );
   }

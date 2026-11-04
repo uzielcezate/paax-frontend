@@ -35,7 +35,7 @@ class Track extends HiveObject {
   @HiveField(9)
   final List<Map<String, String>>? artists;
 
-  @HiveField(10)
+  @HiveField(10, defaultValue: false)
   final bool isExplicit;
 
   /// Deezer track id (from the v2 payload's top-level `id`). Used ONLY to
