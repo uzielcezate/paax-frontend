@@ -1,7 +1,7 @@
 # Feature: Portfolio Demo Mode (web)
 
 > **Purpose**: How a visitor of `https://uzielsandoval.com` explores the real PAAX app for ten minutes without registering, and how that is kept secure and isolated.
-> **Status (2026-10-30)**: implemented locally on the `worktree-web-demo-mode` worktree (frontend) and `feat/demo-sessions` (paax-api). **Not deployed, migration not applied, no PR.**
+> **Status (2026-11-04)**: merged — frontend `main` `a9b6ecb` (PRs #100, #101, live on Vercel), paax-api `main` `148cc31` (PRs #6, #7, live on Railway with `DEMO_ENABLED=false`). Supabase migration applied. Pending: Cloudflare Pages host `demo.paaxmusic.app` (Stage 4B) and controlled activation (Stage 5).
 > **Update when**: the demo endpoints, the session lifecycle, the database guard, or the portfolio contract change.
 
 ---
@@ -11,7 +11,7 @@
 Demo mode is an **additive, opt-in** entry point of the existing Flutter **web** build. Nothing in normal PAAX changes: mobile keeps `AuthGate`, login, registration, onboarding and every screen exactly as before. Demo mode is only entered when the web app is launched with a demo marker in the URL **and** the backend has minted a valid demo session.
 
 ```
-Start Demo (portfolio) → iframe https://paaxmusic.app/?demo=1
+Start Demo (portfolio) → iframe https://demo.paaxmusic.app/?demo=1
   → DemoGate → POST api.paaxmusic.app/v2/demo/sessions
   → paax-api mints a throwaway Supabase identity (service role), returns its session tokens
   → Flutter adopts the session (supabase.auth.setSession) → AuthController sees `signedIn`
@@ -98,9 +98,11 @@ notify pgrst, 'reload config';
 ### Embedding (recommended — the Flutter app does everything)
 
 ```html
-<!-- Start Demo button → mount this iframe -->
+<!-- Start Demo button → mount this iframe (the web demo is hosted on its own
+     Cloudflare Pages hostname; never embed paaxmusic.app or a *.pages.dev preview) -->
 <iframe
-  src="https://paaxmusic.app/?demo=1"
+  id="paax-demo"
+  src="https://demo.paaxmusic.app/?demo=1"
   allow="autoplay; encrypted-media; fullscreen"
   referrerpolicy="strict-origin-when-cross-origin"
   style="width:393px;height:852px;border:0;border-radius:48px"></iframe>
@@ -111,16 +113,22 @@ notify pgrst, 'reload config';
 - **Lifecycle events** are posted to the parent window as JSON strings; the portfolio can render its own timer from them:
 
 ```js
+const demoFrame = document.getElementById('paax-demo');
 window.addEventListener('message', (e) => {
-  if (e.origin !== 'https://paaxmusic.app') return;
-  const m = JSON.parse(e.data);                 // { type: 'paax-demo', event, ... }
-  if (m.type !== 'paax-demo') return;
+  // BOTH checks are required: the exact demo origin AND the exact iframe window.
+  // The app posts with a wildcard target origin (payload is lifecycle state only,
+  // never tokens), so the parent must be the side that filters.
+  if (e.origin !== 'https://demo.paaxmusic.app') return;
+  if (e.source !== demoFrame.contentWindow) return;
+  let m;
+  try { m = JSON.parse(e.data); } catch (_) { return; }   // { type: 'paax-demo', event, ... }
+  if (!m || m.type !== 'paax-demo') return;
   // event: 'started' {remainingSeconds, expiresAt} | 'tick' {remainingSeconds}
   //        | 'ended' {reason: 'expired'|'signed_out'|'ended'} | 'error' {message}
 });
 ```
 
-- **Requirements on the paaxmusic.app host**: send `Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com` (and no `X-Frame-Options: DENY`). Serve `index.html` for `/demo` if the path form is used; the query form `?demo=1` needs nothing.
+- **Requirements on the `demo.paaxmusic.app` host** (Cloudflare Pages, direct upload of `build/web`): send `Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com` (and no `X-Frame-Options: DENY`). Serve `index.html` for `/demo` if the path form is used; the query form `?demo=1` needs nothing. Both are shipped by `frontend/web/_headers` and `frontend/web/_redirects`, which `flutter build web` copies into the output.
 - **Autoplay**: the first play always follows a tap inside the iframe (browser policy); `allow="autoplay"` lets subsequent tracks continue.
 - Development origins (`http://localhost:*`, `127.0.0.1`) are already allowed by paax-api's CORS regex.
 
@@ -258,7 +266,7 @@ From `http://127.0.0.1:8087` most label-owned videos (Sony/UMG catalog, e.g. `FW
 
 ## Testing
 
-- paax-api: `tests/test_demo_sessions.py` — identity minting (flag, confirmed email, random password never returned), independent identities/expiries for two visitors, rollback on token-exchange failure, server-authoritative status/expiry, end marks + deletes, sweep grace window, router create/status/end, per-IP rate limit via `X-Forwarded-For`, kill switch, existing routes untouched. Plus `tests/test_cors_origins.py` (allowlist parser, preflight/authenticated requests, anchored local regex, optional Pages-preview regex). Full suite: 117 passed.
+- paax-api: `tests/test_demo_sessions.py` — identity minting (flag, confirmed email, random password never returned), independent identities/expiries for two visitors, rollback on token-exchange failure, server-authoritative status/expiry, end marks + deletes, sweep grace window, router create/status/end, per-IP rate limit keyed on the edge-written `X-Real-IP` (forged `CF-Connecting-IP` / `X-Forwarded-For` ignored, missing/malformed identity fails closed, IPv6 per /64), fail-closed without Redis, kill switch, existing routes untouched. Plus `tests/test_cors_origins.py` (allowlist parser, preflight/authenticated requests, anchored local regex, optional Pages-preview regex). Full suite: 131 passed (paax-api main `148cc31`).
 - Flutter: `test/unit/demo_mode_test.dart` (URL opt-in, never on mobile), `test/unit/demo_session_controller_test.dart` (start, expiry side effects, restart mints a new identity, reload resumes remaining time, reload of an expired session ends, server re-validation wins, sign-out guard, rate-limit error + retry). Full unit+widget suite (worktree, 2026-10-30): 708 passed, 1 failed — `test/widget_test.dart` "App smoke test" fails identically on `main` (pre-existing `path_provider` MissingPluginException in the VM test runner), unrelated to the demo work.
 - Browser E2E (puppeteer-core, pointer-only, local stack): see "Flutter Web validation" above — Start → Home → Album → Play → mini player → Search → Artist → Library/Profile → expiry (forced and natural) → Restart → reload; two visitors in two browser profiles see only their own rows.
 
@@ -300,9 +308,16 @@ deferred until the application method is final. Rollback: `05_emergency_detach_g
 malformed value cannot raise; the only raises are the intentional PT401/PT403 for demo identities. Cost for
 real traffic: one `current_setting` + a few jsonb lookups per request.
 
-**Rate limiter behind the real proxies:** `CF-Connecting-IP` first, else the rightmost `X-Forwarded-For` hop,
-else the socket peer (first-hop trust removed; tests cover a spoofed first hop). Redis-backed; degrades open if
-Redis is down.
+**Rate limiter behind the real proxies (paax-api PR #7, main `148cc31`):** the per-visitor bucket is keyed
+ONLY on `X-Real-IP`. Railway's public HTTP edge replaces any caller-sent `X-Real-IP`/`X-Forwarded-For` and derives
+`X-Real-IP` from `CF-Connecting-IP` only when the TCP peer is Cloudflare, so through Cloudflare it is the visitor
+and on the direct-to-Railway-edge path (Host-header bypass, which exists) it is the caller's real socket address.
+`CF-Connecting-IP` and `X-Forwarded-For` are not read (Cloudflare itself also rejects a client-sent
+`CF-Connecting-IP` with 403 error 1000). Missing or malformed identity → 503 `DEMO_UNAVAILABLE`, nothing minted,
+address never logged. Creation also fails closed when Redis is missing or down (`DEMO_REQUIRE_RATE_LIMITER=true`).
+Known limitation: Railway private networking bypasses the edge sanitisation; Railway calls this current behaviour,
+not a contract. Live verification of the header path is part of Stage 5 activation (expect 429 on the 7th create
+from one browser, never 503).
 
 ## Known limitations
 
