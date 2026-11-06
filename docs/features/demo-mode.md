@@ -1,7 +1,7 @@
 # Feature: Portfolio Demo Mode (web)
 
 > **Purpose**: How a visitor of `https://uzielsandoval.com` explores the real PAAX app for ten minutes without registering, and how that is kept secure and isolated.
-> **Status (2026-10-30)**: implemented locally on the `worktree-web-demo-mode` worktree (frontend) and `feat/demo-sessions` (paax-api). **Not deployed, migration not applied, no PR.**
+> **Status (2026-11-06)**: released and validated, **demo disabled** pending portfolio launch. Frontend `main` `f1868b1` (PRs #100, #101, #103 — service worker v2; live on Vercel and on Cloudflare Pages project `paax-demo`), paax-api `main` `ae08872` (PRs #6, #7, #8 — password-policy fix; live on Railway with `DEMO_ENABLED=false`, `DEMO_REQUIRE_RATE_LIMITER=true`, `DEMO_RATE_LIMIT_GLOBAL=20`). Supabase migration applied to production (2026-11-04, post-apply checks green). Final host `https://demo.paaxmusic.app` active (Stage 4C). Controlled activations (Stages 5, 5.2) validated identity minting, rate limiting, isolation, lifecycle and cleanup end to end; see [Production status](#production-status-2026-11-06). **Open blocker:** YouTube embedded playback in the web demo fails with error 150 since 2026-11-06 (credentialless player frame; playback engine untouched, fix needs separate approval). Pending: that fix, portfolio iframe integration and public activation (`DEMO_ENABLED=true`).
 > **Update when**: the demo endpoints, the session lifecycle, the database guard, or the portfolio contract change.
 
 ---
@@ -11,7 +11,7 @@
 Demo mode is an **additive, opt-in** entry point of the existing Flutter **web** build. Nothing in normal PAAX changes: mobile keeps `AuthGate`, login, registration, onboarding and every screen exactly as before. Demo mode is only entered when the web app is launched with a demo marker in the URL **and** the backend has minted a valid demo session.
 
 ```
-Start Demo (portfolio) → iframe https://paaxmusic.app/?demo=1
+Start Demo (portfolio) → iframe https://demo.paaxmusic.app/?demo=1
   → DemoGate → POST api.paaxmusic.app/v2/demo/sessions
   → paax-api mints a throwaway Supabase identity (service role), returns its session tokens
   → Flutter adopts the session (supabase.auth.setSession) → AuthController sees `signedIn`
@@ -32,7 +32,8 @@ Start Demo (portfolio) → iframe https://paaxmusic.app/?demo=1
 | paax-api | `api/demo_router.py` | `/v2/demo/*` endpoints, per-IP + global rate limits, kill switch. |
 | paax-api | `config.py`, `app_container.py`, `main.py` | Additive settings (`DEMO_*`, `SUPABASE_PUBLISHABLE_KEY` preferred / `SUPABASE_ANON_KEY` legacy fallback), service construction, router mount. |
 | paax-api | `repositories/supabase_client.py` | Additive `insert` / `delete` / `auth_admin` on the existing gateway. |
-| Database | `supabase/migrations/20261030000000_demo_sessions.sql` | `demo_sessions` table (authoritative expiry), `demo_session_status()` RPC, PostgREST pre-request guard, `private.demo_cleanup()` + pg_cron. **Not applied yet — see [Database guard review](#database-guard-review).** |
+| Database | `supabase/migrations/20261030000000_demo_sessions.sql` | `demo_sessions` table (authoritative expiry), `demo_session_status()` RPC, PostgREST pre-request guard, `private.demo_cleanup()` + pg_cron. **Applied to production on 2026-11-04** (runbook `docs/runbooks/demo-release/`, post-apply checks green; `paax_demo_cleanup` runs every minute). See [Database guard review](#database-guard-review). |
+| Flutter (web) | `web/custom_service_worker.js` | App-shell service worker **v2** (`paax-app-shell-v2`): the navigation shell is cached under `./` only and served only when it is a successful, non-redirected HTML response. v1 pre-cached `./index.html`, which Cloudflare Pages answers with a `308` to `/`, and browsers reject a redirected response for a navigation (`ERR_FAILED` on every visit after the first). Details and tests: `docs/frontend/web-service-worker.md`, `test/web_sw/`. |
 | Flutter | `core/demo/demo_mode.dart` | `DemoMode.isRequested` — `kIsWeb` && (`?demo=1` \| `/demo` \| `#/demo`). |
 | Flutter | `data/remote/demo_session_api.dart` | HTTP client for the three endpoints. |
 | Flutter | `data/remote/supabase_demo_session_adapter.dart` | The only Supabase touchpoint: `setSession(refreshToken, accessToken: …)`, `signOut(scope: local)`, `app_metadata.paax_demo` check. **Both tokens are required**: with a refresh token alone the SDK emits `tokenRefreshed`, which `AuthController` intentionally ignores (no profile re-resolution on refresh), and the shell stays on Welcome — found in staging. With the access token it emits `signedIn`, exactly like a password login. |
@@ -47,7 +48,7 @@ Start Demo (portfolio) → iframe https://paaxmusic.app/?demo=1
 
 | Moment | Server | Client |
 |--------|--------|--------|
-| Start | `admin.create_user` (random email `demo-<uuid>@demo.paaxmusic.app`, random 32-byte password never stored, `email_confirm=true`, `app_metadata.paax_demo=true`), profile completed (`display_name`, `birth_date`, `country_code`, `onboarding_completed`), `demo_sessions` row with `expires_at = now()+600s`, password grant with the public API key (`sb_publishable_…` preferred, legacy anon JWT fallback; sent only as the `apikey` header, never decoded) | `setSession(refresh_token)`; countdown seeded from `duration_seconds` (not from the browser clock vs. an absolute time) |
+| Start | `admin.create_user` (random email `demo-<uuid>@demo.paaxmusic.app`, random 40-character one-time password that satisfies the project's Auth password policy (lower + upper + digit + symbol, CSPRNG), never stored or logged, with exactly one retry on `AuthWeakPasswordError` — paax-api PR #8, `email_confirm=true`, `app_metadata.paax_demo=true`), profile completed (`display_name`, `birth_date`, `country_code`, `onboarding_completed`), `demo_sessions` row with `expires_at = now()+600s`, password grant with the public API key (`sb_publishable_…` preferred, legacy anon JWT fallback; sent only as the `apikey` header, never decoded) | `setSession(refresh_token)`; countdown seeded from `duration_seconds` (not from the browser clock vs. an absolute time) |
 | Active | `GET /v2/demo/sessions/me` returns `remaining_seconds`; PostgREST guard rejects the identity once `expires_at <= now()` | ticks every second; every 60 s re-seeds from the server; `postMessage` `tick` |
 | Reload / modal reopened | same row, same expiry | `bootstrap()` finds the persisted Supabase session → asks the server → resumes with the server's remaining time, or shows **Ended** if it expired meanwhile. Never a fresh ten minutes. |
 | End (timer, sign-out, explicit) | `POST /v2/demo/sessions/end` marks `ended_at` and **deletes the auth user** (cascade wipes profile, likes, playlists, notifications) | pauses playback (`togglePlayPause` only if playing), local sign-out, `HiveStorage.clearAll()`, Ended screen, `postMessage` `ended` |
@@ -98,9 +99,11 @@ notify pgrst, 'reload config';
 ### Embedding (recommended — the Flutter app does everything)
 
 ```html
-<!-- Start Demo button → mount this iframe -->
+<!-- Start Demo button → mount this iframe (the web demo is hosted on its own
+     Cloudflare Pages hostname; never embed paaxmusic.app or a *.pages.dev preview) -->
 <iframe
-  src="https://paaxmusic.app/?demo=1"
+  id="paax-demo"
+  src="https://demo.paaxmusic.app/?demo=1"
   allow="autoplay; encrypted-media; fullscreen"
   referrerpolicy="strict-origin-when-cross-origin"
   style="width:393px;height:852px;border:0;border-radius:48px"></iframe>
@@ -111,16 +114,22 @@ notify pgrst, 'reload config';
 - **Lifecycle events** are posted to the parent window as JSON strings; the portfolio can render its own timer from them:
 
 ```js
+const demoFrame = document.getElementById('paax-demo');
 window.addEventListener('message', (e) => {
-  if (e.origin !== 'https://paaxmusic.app') return;
-  const m = JSON.parse(e.data);                 // { type: 'paax-demo', event, ... }
-  if (m.type !== 'paax-demo') return;
+  // BOTH checks are required: the exact demo origin AND the exact iframe window.
+  // The app posts with a wildcard target origin (payload is lifecycle state only,
+  // never tokens), so the parent must be the side that filters.
+  if (e.origin !== 'https://demo.paaxmusic.app') return;
+  if (e.source !== demoFrame.contentWindow) return;
+  let m;
+  try { m = JSON.parse(e.data); } catch (_) { return; }   // { type: 'paax-demo', event, ... }
+  if (!m || m.type !== 'paax-demo') return;
   // event: 'started' {remainingSeconds, expiresAt} | 'tick' {remainingSeconds}
   //        | 'ended' {reason: 'expired'|'signed_out'|'ended'} | 'error' {message}
 });
 ```
 
-- **Requirements on the paaxmusic.app host**: send `Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com` (and no `X-Frame-Options: DENY`). Serve `index.html` for `/demo` if the path form is used; the query form `?demo=1` needs nothing.
+- **Requirements on the `demo.paaxmusic.app` host** (Cloudflare Pages, direct upload of `build/web`): send `Content-Security-Policy: frame-ancestors 'self' https://uzielsandoval.com https://www.uzielsandoval.com` (and no `X-Frame-Options: DENY`). Use the **query form `?demo=1`** (the portfolio contract above). On Pages the `/demo` path rewrite is canonicalised to a `308` to `/` (query preserved), and `/index.html` is always `308` to `/` — which is why the service worker is v2. Both files are shipped by `frontend/web/_headers` and `frontend/web/_redirects`, which `flutter build web` copies into the output. Verified on the live host (2026-11-05): CSP allows the `self` ancestor and refuses a foreign origin; TLS certificate `CN=demo.paaxmusic.app` (Google Trust Services), DNS `demo CNAME paax-demo.pages.dev` (proxied), no other DNS record touched.
 - **Autoplay**: the first play always follows a tap inside the iframe (browser policy); `allow="autoplay"` lets subsequent tracks continue.
 - Development origins (`http://localhost:*`, `127.0.0.1`) are already allowed by paax-api's CORS regex.
 
@@ -157,8 +166,8 @@ The tokens are those of a throwaway identity that the server deletes at expiry; 
 | Railway `paax-api` | `FRONTEND_ORIGINS` | replace the current wildcard `*` with the explicit allowlist `https://paaxmusic.app,https://www.paaxmusic.app,https://demo.paaxmusic.app,https://uzielsandoval.com,https://www.uzielsandoval.com` (see *CORS allowlist audit* below) |
 | Railway `paax-api` | `FRONTEND_ORIGIN_REGEX` | optional, only while testing Cloudflare Pages previews: `https://[a-z0-9-]+\.<pages-project>\.pages\.dev`; remove afterwards |
 | Railway `paax-api` | `DEMO_ENABLED` | **`false` by default** (unset = disabled, `/v2/demo/*` answers 503 `DEMO_DISABLED`). Set `true` only at activation time; set `false` to kill the feature instantly |
-| Railway `paax-api` | `DEMO_SESSION_SECONDS`, `DEMO_RATE_LIMIT_PER_IP`, `DEMO_RATE_LIMIT_WINDOW_SECONDS`, `DEMO_RATE_LIMIT_GLOBAL`, `DEMO_EMAIL_DOMAIN`, `DEMO_DISPLAY_NAME`, `DEMO_WEB_URL` | optional overrides (defaults 600 / 6 / 600 / 120 / `demo.paaxmusic.app` / `Demo Visitor` / `https://paaxmusic.app/?demo=1`) |
-| Supabase | migration `20261030000000_demo_sessions.sql` | apply after review |
+| Railway `paax-api` | `DEMO_SESSION_SECONDS`, `DEMO_RATE_LIMIT_PER_IP`, `DEMO_RATE_LIMIT_WINDOW_SECONDS`, `DEMO_RATE_LIMIT_GLOBAL`, `DEMO_EMAIL_DOMAIN`, `DEMO_DISPLAY_NAME`, `DEMO_WEB_URL` | optional overrides (defaults 600 / 6 / 600 / 120 / `demo.paaxmusic.app` / `Demo Visitor` / `https://paaxmusic.app/?demo=1`). Production currently sets `DEMO_RATE_LIMIT_GLOBAL=20` (temporary, Stage 5) and `DEMO_WEB_URL=https://demo.paaxmusic.app/?demo=1`. |
+| Supabase | migration `20261030000000_demo_sessions.sql` | applied to production (2026-11-04) |
 | Web host | CSP `frame-ancestors` | see above |
 
 ---
@@ -258,7 +267,8 @@ From `http://127.0.0.1:8087` most label-owned videos (Sony/UMG catalog, e.g. `FW
 
 ## Testing
 
-- paax-api: `tests/test_demo_sessions.py` — identity minting (flag, confirmed email, random password never returned), independent identities/expiries for two visitors, rollback on token-exchange failure, server-authoritative status/expiry, end marks + deletes, sweep grace window, router create/status/end, per-IP rate limit via `X-Forwarded-For`, kill switch, existing routes untouched. Plus `tests/test_cors_origins.py` (allowlist parser, preflight/authenticated requests, anchored local regex, optional Pages-preview regex). Full suite: 117 passed.
+- paax-api: `tests/test_demo_sessions.py` — identity minting (flag, confirmed email, random password never returned), independent identities/expiries for two visitors, rollback on token-exchange failure, server-authoritative status/expiry, end marks + deletes, sweep grace window, router create/status/end, per-IP rate limit keyed on the edge-written `X-Real-IP` (forged `CF-Connecting-IP` / `X-Forwarded-For` ignored, missing/malformed identity fails closed, IPv6 per /64), fail-closed without Redis, kill switch, existing routes untouched. Plus `tests/test_cors_origins.py` (allowlist parser, preflight/authenticated requests, anchored local regex, optional Pages-preview regex). PR #8 adds the policy-compliant password generator (5000 generated passwords checked offline, `token_urlsafe` regression, exactly-one retry on `AuthWeakPasswordError`, no password in logs/responses). Full suite: 141 passed (paax-api main `ae08872`).
+- Web service worker: `frontend/test/web_sw/custom_service_worker.test.mjs` (`node --test frontend/test/web_sw/`, 15 tests; 10 of them fail against v1 via `PAAX_SW_PATH`).
 - Flutter: `test/unit/demo_mode_test.dart` (URL opt-in, never on mobile), `test/unit/demo_session_controller_test.dart` (start, expiry side effects, restart mints a new identity, reload resumes remaining time, reload of an expired session ends, server re-validation wins, sign-out guard, rate-limit error + retry). Full unit+widget suite (worktree, 2026-10-30): 708 passed, 1 failed — `test/widget_test.dart` "App smoke test" fails identically on `main` (pre-existing `path_provider` MissingPluginException in the VM test runner), unrelated to the demo work.
 - Browser E2E (puppeteer-core, pointer-only, local stack): see "Flutter Web validation" above — Start → Home → Album → Play → mini player → Search → Artist → Library/Profile → expiry (forced and natural) → Restart → reload; two visitors in two browser profiles see only their own rows.
 
@@ -300,14 +310,59 @@ deferred until the application method is final. Rollback: `05_emergency_detach_g
 malformed value cannot raise; the only raises are the intentional PT401/PT403 for demo identities. Cost for
 real traffic: one `current_setting` + a few jsonb lookups per request.
 
-**Rate limiter behind the real proxies:** `CF-Connecting-IP` first, else the rightmost `X-Forwarded-For` hop,
-else the socket peer (first-hop trust removed; tests cover a spoofed first hop). Redis-backed; degrades open if
-Redis is down.
+**Rate limiter behind the real proxies (paax-api PR #7, main `148cc31`):** the per-visitor bucket is keyed
+ONLY on `X-Real-IP`. Railway's public HTTP edge replaces any caller-sent `X-Real-IP`/`X-Forwarded-For` and derives
+`X-Real-IP` from `CF-Connecting-IP` only when the TCP peer is Cloudflare, so through Cloudflare it is the visitor
+and on the direct-to-Railway-edge path (Host-header bypass, which exists) it is the caller's real socket address.
+`CF-Connecting-IP` and `X-Forwarded-For` are not read (Cloudflare itself also rejects a client-sent
+`CF-Connecting-IP` with 403 error 1000). Missing or malformed identity → 503 `DEMO_UNAVAILABLE`, nothing minted,
+address never logged. Creation also fails closed when Redis is missing or down (`DEMO_REQUIRE_RATE_LIMITER=true`).
+Known limitation: Railway private networking bypasses the edge sanitisation; Railway calls this current behaviour,
+not a contract. Live verification of the header path is part of Stage 5 activation (expect 429 on the 7th create
+from one browser, never 503).
+
+## Production status (2026-11-06)
+
+| Component | State |
+|---|---|
+| Frontend `main` | `f1868b1` (PR #103 merged: service worker v2) |
+| Web host | Cloudflare Pages project `paax-demo`, production deployment built from `f1868b1` (release dir `web-demo-f1868b1`, `SHA256SUMS.txt` recorded), custom domain `https://demo.paaxmusic.app` **active** (Stage 4C), CSP `frame-ancestors` verified positive and negative |
+| paax-api `main` | `ae08872` (PR #7 trusted-IP limiter, PR #8 password policy), Railway deployment ACTIVE |
+| Railway variables | `DEMO_ENABLED=false` (kill switch, demo disabled), `DEMO_REQUIRE_RATE_LIMITER=true`, `DEMO_RATE_LIMIT_GLOBAL=20` (temporary), `DEMO_WEB_URL`, `FRONTEND_ORIGINS` allowlist, `SUPABASE_PUBLISHABLE_KEY`; secrets unchanged |
+| Supabase | migration applied 2026-11-04; `paax_demo_cleanup` cron active; guard returns `401 PT401 DEMO_SESSION_EXPIRED` for ended demo JWTs |
+| Normal-user baseline | 5 `auth.users`, 5 `profiles`, 30 `playlists`, unchanged across every activation |
+
+**Stage 5 (2026-11-05, controlled activation):** real browser session minted with `paax_demo=true` / 600 s; Home, Search,
+album, YouTube iframe playback, mini/full player, pause/resume/next; 7th creation from one address → `429 DEMO_RATE_LIMITED`
+with `Retry-After`; forged `X-Forwarded-For` / `X-Real-IP` still 429, forged `CF-Connecting-IP` → Cloudflare 403; reload does
+not mint; RLS isolation (own row only); ended JWT rejected by the guard; natural expiry → "Demo Session Ended" → Restart;
+cron deleted the expired identities within ~2 min. Finding: 2 of 8 creations failed with `502 DEMO_IDENTITY_CREATE_FAILED`
+(`AuthWeakPasswordError`: `token_urlsafe` passwords lack symbols ~25 % of the time) → fixed in Stage 5.1 (PR #8).
+
+**Stage 5.2 (2026-11-06, final controlled validation, `DEMO_ENABLED=true` from 06:27 to shutdown UTC):** 6 of 6 scripted
+creations from the desktop network returned 201 (no 502, no weak-password error), each identity carried
+`app_metadata.paax_demo=true` and `demo_client`, a confirmed `demo-…` email and a matching `demo_sessions` row; the 7th
+creation → 429 (`Retry-After 586`); `X-Forwarded-For`, `X-Real-IP`, `Forwarded` and `True-Client-IP` forgeries all 429
+(bucket unchanged); all six ended explicitly (200) and were removed. Browser smoke test on the live host: start without
+registration, Home, Search, album pages, reload resumes the same session, natural expiry → "Demo Session Ended", Restart Demo
+mints a new identity, Profile → Log out ends it (`ended` / `signed_out` posted to the parent). **Playback did not start**: every
+track returned YouTube player error 150 (`errorCode: "auth"`) — see Known limitations. Shutdown: `DEMO_ENABLED=false` redeployed,
+`POST /v2/demo/sessions` → 503, all test identities removed by the end-or-cleanup path, normal-user counts unchanged.
+
+**Open blocker — YouTube embedded playback in the web demo (found 2026-11-06, no code changed):** the hidden
+`youtube_player_iframe` frame carries the `credentialless` attribute. Since 2026-11-06 YouTube answers that player with
+`PlayerError 150` / `errorCode: "auth"` for every video (label-owned and independent uploads alike), while an identical
+copy of the same frame template without `credentialless`, on the same origin with the same player parameters and the
+same video ids, plays normally. Playback worked on 2026-11-05 with the byte-identical build, so this is a YouTube-side
+policy change. Any fix touches the playback engine (`core/playback/playback_engine_web.dart` / the package's web
+template) and requires separate explicit approval.
 
 ## Known limitations
 
 - Demo identities see the same Home a brand-new real user sees (Trending / Recently added + whatever they follow during the session). No follows are seeded: fake taste would be indistinguishable from real recommendation logic.
-- `https://paaxmusic.app` currently answers Cloudflare 522/525 (origin down); the embed cannot work until the web host is restored. See [current-state](../current-state.md).
+- `https://paaxmusic.app` (apex / `www`) still answers Cloudflare 522/525 (origin down, pre-existing and untouched). The demo does not depend on it: the embed target is `https://demo.paaxmusic.app`, served from Cloudflare Pages. See [current-state](../current-state.md).
 - The profile email shown in Profile is the generated `demo-…@demo.paaxmusic.app` address.
-- Label-owned YouTube videos refuse embedding from loopback/IP origins (error 150); the demo must run from a real domain (`demo.paaxmusic.app`). Real-domain playback is unverified until the Pages deployment exists.
+- Label-owned YouTube videos refuse embedding from loopback/IP origins (error 150); the demo must run from a real domain (`demo.paaxmusic.app`). Real-domain playback was verified on 2026-11-05 (YouTube iframe, mini/full player, pause/resume/next) but **failed on 2026-11-06 with error 150 for every video** — see the open blocker under [Production status](#production-status-2026-11-06).
+- The Random Access Memories album page intermittently shows no track list (observed once in Stage 5 and recorded in Stage 5.2). Catalog/UI issue, not playback; not modified during the demo release.
+- Per-IP bucket independence between two physically different networks has not yet been observed live (needs a second connection, e.g. a phone on mobile data); the trusted-header path is covered by unit tests and by the forged-header checks below.
 - Cold album pages (first ingestion of an album) can take 15–20 s before track rows appear.
