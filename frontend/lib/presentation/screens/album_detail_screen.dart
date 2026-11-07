@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -55,6 +56,13 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
   List<Map<String, String>>? _resolvedArtists;
 
   bool get _isSingleMode => widget.singleDetail != null;
+
+  // Header geometry caps. The header used to be sized from the full screen width,
+  // which on wide (desktop-width) Web windows pushed the title, action buttons
+  // and track list far below the fold. Capping the square keeps phone layouts
+  // (<= 444 dp wide) identical and gives wide viewports a compact header.
+  static const double _kMaxCoverSize = 240; // matches the rendered cover clamp
+  static const double _kMaxHeaderSquare = 480;
 
   String get _title =>
       _isSingleMode ? widget.singleDetail!.title : widget.album!.title;
@@ -373,7 +381,7 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                       top: 0,
                       left: 0,
                       right: 0,
-                      height: MediaQuery.of(context).size.width,
+                      height: math.min(MediaQuery.of(context).size.width, _kMaxHeaderSquare),
                       child: ClipRect(
                         child: Stack(
                           fit: StackFit.expand,
@@ -416,9 +424,9 @@ class _AlbumDetailScreenState extends State<AlbumDetailScreen> {
                         builder: (context) {
                           final double screenWidth = MediaQuery.of(context).size.width;
                           final double topSafeArea = MediaQuery.of(context).padding.top;
-                          final double coverSize = screenWidth * 0.54;
+                          final double coverSize = math.min(screenWidth * 0.54, _kMaxCoverSize);
                           const double textBlockHeight = 84; 
-                          final double targetButtonY = screenWidth + 16;
+                          final double targetButtonY = math.min(screenWidth, _kMaxHeaderSquare) + 16;
                           final double currentY = topSafeArea + 16 + coverSize + textBlockHeight + 16; // 16 is bottom gap
                           final double gap = targetButtonY - currentY;
                           final double dynamicGap = gap > 0 ? gap : 0;
